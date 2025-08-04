@@ -1,25 +1,38 @@
-# 🎙️ 30 Days of Voice Agents
+# 🎤 VoiceForge - Professional Text-to-Speech Platform
 
-Welcome to the "30 Days of Voice Agents" challenge by Murf AI! This repository contains the progressive development of a voice agent project over 30 days.
+**Transform your text into natural-sounding speech with cutting-edge AI technology.**
 
-## 📅 Progress Tracker
+VoiceForge is a modern, professional text-to-speech platform that converts your written content into high-quality audio using advanced AI voices. Perfect for creating voiceovers, audiobooks, podcasts, and accessibility solutions.
 
-- **Day 1**: ✅ Project Setup - FastAPI backend with frontend
-- **Day 2**: ✅ Your First REST TTS Call - TTS endpoint with Murf API integration
-- **Day 3**: 🔄 Coming soon...
+![VoiceForge Platform](https://img.shields.io/badge/Platform-Text--to--Speech-blue?style=for-the-badge)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.104.1-009688?style=flat-square&logo=fastapi)
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)
+![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen?style=flat-square)
+
+## ✨ Features
+
+- **🎯 Professional Interface** - Modern, responsive web application
+- **⚡ Lightning Fast** - Generate high-quality audio in seconds
+- **🎭 Multiple Voices** - Choose from various natural-sounding AI voices
+- **🔊 Studio Quality** - Professional-grade audio output
+- **📱 Responsive Design** - Works seamlessly on desktop and mobile
+- **🔒 Secure API** - RESTful API with proper error handling
+- **🎨 Smooth Animations** - Engaging user experience with modern animations
+- **♿ Accessible** - Built with accessibility best practices
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Python 3.11 or higher
 - Git
+- Murf AI API key (for text-to-speech generation)
 
 ### Installation
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/30-days-of-agents.git
-   cd 30-days-of-agents
+   git clone https://github.com/your-username/voiceforge.git
+   cd voiceforge
    ```
 
 2. **Create virtual environment**
@@ -35,11 +48,11 @@ Welcome to the "30 Days of Voice Agents" challenge by Murf AI! This repository c
 
 4. **Configure environment variables**
    ```bash
-   # Copy and edit the environment file
+   # Create environment file
    cp .env.example .env
+   
    # Edit .env and add your Murf API key:
    MURF_API_KEY=your_actual_murf_api_key_here
-   MURF_API_BASE_URL=https://api.murf.ai/v1
    ```
 
 5. **Run the application**
@@ -47,53 +60,48 @@ Welcome to the "30 Days of Voice Agents" challenge by Murf AI! This repository c
    python main.py
    ```
 
-6. **Access the application**
-   - Main app: http://localhost:8000
-   - API documentation: http://localhost:8000/docs
-   - Health check: http://localhost:8000/api/health
+6. **Access VoiceForge**
+   - **Main Platform**: http://localhost:8000
+   - **API Documentation**: http://localhost:8000/docs
+   - **Health Check**: http://localhost:8000/api/health
 
-## 📁 Project Structure
+## 🏗️ Architecture
+
+VoiceForge is built with modern web technologies:
 
 ```
-30-days-of-agents/
+voiceforge/
 ├── main.py                 # FastAPI backend server
 ├── requirements.txt        # Python dependencies
-├── .env                   # Environment variables (not in git)
-├── .env.example           # Environment template
-├── .gitignore             # Git ignore rules
-├── day2_demo.py           # Day 2 demonstration script
-├── test_tts.py            # TTS endpoint testing
+├── .env                   # Environment variables (create from .env.example)
 ├── templates/
-│   └── index.html         # Main HTML template
+│   └── index.html         # Professional SPA frontend
 ├── static/
-│   ├── script.js          # JavaScript functionality
-│   └── style.css          # Styling
-└── README.md              # This file
+│   ├── script.js          # Modern JavaScript with animations
+│   └── style.css          # Professional CSS with responsive design
+└── README.md              # This documentation
 ```
 
-## 🎯 Features by Day
+### Technology Stack
 
-### Day 1: Project Setup ✅
-- ✅ FastAPI backend with auto-documentation
-- ✅ HTML template rendering with Jinja2
-- ✅ Static file serving (CSS, JS)
-- ✅ Interactive frontend with JavaScript
-- ✅ Health check API endpoint
+- **Backend**: FastAPI + Python 3.11+
+- **Frontend**: Modern HTML5, CSS3, JavaScript ES6+
+- **AI/TTS**: Murf AI API integration
+- **Styling**: Custom CSS with CSS Grid, Flexbox, and animations
+- **Fonts**: Google Fonts (Inter)
+- **Deployment**: Production-ready ASGI server
 
-### Day 2: REST TTS API ✅
-- ✅ TTS endpoint: `POST /api/tts`
-- ✅ Secure API key management
-- ✅ Request/response validation with Pydantic
-- ✅ Error handling and logging
-- ✅ Interactive API documentation
+## 🔧 API Reference
 
-## 🔧 API Endpoints
+### Core Endpoints
 
-### `GET /`
-Serves the main HTML page
+#### `GET /`
+Serves the main VoiceForge web application
 
-### `GET /api/health`
-Health check endpoint
+#### `GET /api/health`
+System health check endpoint
+
+**Response:**
 ```json
 {
   "status": "healthy",
@@ -101,14 +109,14 @@ Health check endpoint
 }
 ```
 
-### `POST /api/tts`
-Text-to-Speech conversion endpoint
+#### `POST /api/tts`
+Convert text to speech using AI voices
 
 **Request:**
 ```json
 {
-  "text": "Hello! Welcome to Day 2 of voice agents.",
-  "voice_id": "en-US-natalie"
+  "text": "Welcome to VoiceForge, where your words come to life!",
+  "voice_id": "en-US-terrell"
 }
 ```
 
@@ -116,75 +124,198 @@ Text-to-Speech conversion endpoint
 ```json
 {
   "success": true,
-  "audio_url": "https://generated-audio-url.mp3",
-  "message": "Successfully generated speech for 42 characters using en-US-natalie"
+  "audio_file": "https://generated-audio-url.mp3",
+  "message": "Audio file generated successfully. The link will be available for 72 hours."
 }
 ```
 
-## 🧪 Testing
+**Available Voices:**
+- `en-US-terrell` - Professional Male Voice
+- `en-US-sarah` - Warm Female Voice (if configured)
+- `en-US-mike` - Friendly Male Voice (if configured)
 
-### Run All Tests
-```bash
-# Test TTS endpoint
-python test_tts.py
+### Error Handling
 
-# Day 2 demonstration
-python day2_demo.py
+The API provides comprehensive error handling:
+
+```json
+{
+  "detail": "Error description here"
+}
 ```
 
-### Manual Testing
-1. Open http://localhost:8000/docs
-2. Try the `/api/tts` endpoint with sample data
-3. Verify responses and error handling
+Common error codes:
+- `400` - Bad Request (empty text, invalid parameters)
+- `500` - Internal Server Error (API issues, network problems)
 
-## 🔐 Environment Setup
+## 🎨 Frontend Features
 
-Create a `.env` file with:
+### Modern User Interface
+- **Responsive Design**: Works on all screen sizes
+- **Smooth Animations**: Professional hover effects and transitions
+- **Interactive Elements**: Real-time feedback and loading states
+- **Accessibility**: Keyboard navigation and screen reader support
+
+### Animation System
+- **Sound Wave Visualization**: Animated sound bars in hero section
+- **Scroll Animations**: Elements animate in as you scroll
+- **Hover Effects**: Interactive buttons and cards
+- **Smooth Scrolling**: Navigation with smooth scroll behavior
+
+### User Experience
+- **Professional Branding**: Modern VoiceForge identity
+- **Intuitive Interface**: Clean, focused design
+- **Real-time Feedback**: Status messages and loading indicators
+- **Auto-play Audio**: Generated audio plays automatically (when permitted)
+
+## 🔐 Security & Configuration
+
+### Environment Variables
+
+Create a `.env` file with the following configuration:
+
 ```env
+# Murf AI Configuration
 MURF_API_KEY=your_murf_api_key_here
 MURF_API_BASE_URL=https://api.murf.ai/v1
+
+# Application Configuration (optional)
+DEBUG=false
+HOST=0.0.0.0
+PORT=8000
 ```
 
-**⚠️ Important:** Never commit your `.env` file to git!
+### Security Best Practices
+- ✅ Environment variables for sensitive data
+- ✅ API key validation and error handling
+- ✅ Request validation with Pydantic models
+- ✅ CORS configuration for production
+- ✅ Input sanitization and length limits
 
-## 🏗️ Development
+## 🧪 Testing
 
-### Adding New Days
-1. Add new endpoints to `main.py`
-2. Create corresponding test files
-3. Update this README with progress
-4. Follow the established patterns for consistency
+### Manual Testing
+1. **Web Interface**: Open http://localhost:8000
+2. **Enter Text**: Type or paste text in the textarea
+3. **Select Voice**: Choose from available voice options
+4. **Generate Audio**: Click "Generate Speech" button
+5. **Listen**: Audio will play automatically or click play button
 
-### Code Style
-- Use FastAPI best practices
-- Type hints for all functions
-- Pydantic models for request/response validation
-- Environment variables for configuration
-- Comprehensive error handling
+### API Testing
+Use the interactive API documentation at http://localhost:8000/docs to:
+- Test all endpoints
+- View request/response schemas
+- Try different voice options and text inputs
+
+### Health Check
+```bash
+curl http://localhost:8000/api/health
+```
+
+## 🚀 Deployment
+
+### Production Deployment
+
+1. **Install production server**:
+   ```bash
+   pip install uvicorn[standard] gunicorn
+   ```
+
+2. **Run with Gunicorn**:
+   ```bash
+   gunicorn main:app -w 4 -k uvicorn.workers.UnicornWorker --bind 0.0.0.0:8000
+   ```
+
+3. **Or with Uvicorn**:
+   ```bash
+   uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+   ```
+
+### Docker Deployment
+
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
 
 ## 🤝 Contributing
 
-This is a personal learning project for the "30 Days of Voice Agents" challenge. Feel free to:
-- Fork and create your own version
-- Share improvements via issues
-- Use as reference for your own voice agent projects
+We welcome contributions to VoiceForge! Here's how you can help:
+
+1. **Fork the repository**
+2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
+3. **Commit your changes**: `git commit -m 'Add amazing feature'`
+4. **Push to the branch**: `git push origin feature/amazing-feature`
+5. **Open a Pull Request**
+
+### Development Guidelines
+- Follow Python PEP 8 style guidelines
+- Use type hints for all functions
+- Write comprehensive docstrings
+- Test your changes thoroughly
+- Update documentation as needed
+
+## 📊 Performance
+
+VoiceForge is optimized for performance:
+- **Fast API responses** with efficient request handling
+- **Optimized frontend** with modern CSS and JavaScript
+- **Minimal dependencies** for quick startup
+- **Responsive design** that works on all devices
+- **Progressive enhancement** for better accessibility
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+**API Key Issues:**
+```bash
+# Check if environment variables are loaded
+python -c "import os; print(os.getenv('MURF_API_KEY'))"
+```
+
+**Port Already in Use:**
+```bash
+# Kill process on port 8000
+lsof -ti:8000 | xargs kill -9
+```
+
+**Module Not Found:**
+```bash
+# Ensure virtual environment is activated
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Getting Help
+
+- **Check API Documentation**: http://localhost:8000/docs
+- **Review Logs**: Check console output for error messages
+- **Verify Configuration**: Ensure `.env` file is properly configured
+- **Test API Endpoints**: Use the interactive API docs for testing
 
 ## 📝 License
 
-MIT License - feel free to use this code for your own learning and projects.
+MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-- **Murf AI** for the "30 Days of Voice Agents" challenge
-- **FastAPI** for the excellent web framework
-- **Python community** for the amazing ecosystem
+- **Murf AI** for providing the advanced text-to-speech API
+- **FastAPI** for the excellent Python web framework
+- **Inter Font** by Google Fonts for beautiful typography
+- **Open Source Community** for amazing tools and libraries
 
-## 📞 Contact
+## 📞 Support
 
-- GitHub: [@your-username](https://github.com/your-username)
-- LinkedIn: [Your LinkedIn Profile](https://linkedin.com/in/your-profile)
+- **Documentation**: [API Docs](http://localhost:8000/docs)
+- **Issues**: [GitHub Issues](https://github.com/your-username/voiceforge/issues)
+- **Contact**: [Your Contact Information]
 
 ---
 
-**Current Status**: Day 2 Complete ✅  
-**Next**: Day 3 - Stay tuned! 🎙️
+**VoiceForge** - *Transform your words into beautiful, natural-sounding speech* 🎤✨
