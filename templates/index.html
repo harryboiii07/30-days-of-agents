@@ -3,49 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>30 Days of Voice Agents - Day 1</title>
+    <title>VoiceForge - Professional Text-to-Speech Platform</title>
+    <meta name="description" content="Transform your text into natural-sounding speech with our advanced AI-powered text-to-speech platform. Multiple voices, instant generation, high quality audio.">
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🎙️ 30 Days of Voice Agents</h1>
-            <p class="subtitle">Welcome to Day 1 - Project Setup</p>
-        </header>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="logo">🎤 VoiceForge </span>
+            </div>
+            <div class="nav-links">
+                <a href="#home" class="nav-link">Home</a>
+            </div>
+        </div>
+    </nav>
 
-        <main>
-            <div class="card">
-                <h2>Project Initialized Successfully! 🚀</h2>
-                <p>This is your FastAPI backend serving an HTML page with JavaScript functionality.</p>
-                
-                <div class="features">
-                    <h3>What's Working:</h3>
-                    <ul>
-                        <li>✅ FastAPI backend server</li>
-                        <li>✅ HTML template rendering</li>
-                        <li>✅ Static file serving</li>
-                        <li>✅ JavaScript integration</li>
-                    </ul>
-                </div>
-
-                <div class="interactive-section">
-                    <h3>Test JavaScript Functionality:</h3>
-                    <button id="testBtn" class="btn">Click me to test JavaScript!</button>
-                    <p id="output" class="output"></p>
-                </div>
-
-                <div class="api-section">
-                    <h3>API Health Check:</h3>
-                    <button id="healthBtn" class="btn">Check API Health</button>
-                    <p id="apiOutput" class="output"></p>
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="hero-container">
+            <div class="hero-content">
+                <h1 class="hero-title">Transform Text into <span class="highlight">Natural Speech</span></h1>
+                <p class="hero-subtitle">Experience the future of text-to-speech technology with our AI-powered platform. Create professional voiceovers, audiobooks, and more with just a few clicks.</p>
+            </div>
+            <div class="hero-visual">
+                <div class="sound-wave">
+                    <div class="wave"></div>
+                    <div class="wave"></div>
+                    <div class="wave"></div>
+                    <div class="wave"></div>
+                    <div class="wave"></div>
                 </div>
             </div>
-        </main>
+        </div>
+    </section>
 
-        <footer>
-            <p>Day 1 Complete! Ready for the next 29 days of building voice agents. 🎯</p>
-        </footer>
-    </div>
+
+    <!-- Demo Section -->
+    <section id="demo" class="demo-section">
+        <div class="container">
+            <h2 class="section-title">Try VoiceForge Now</h2>
+            <p class="section-subtitle">Enter your text below and hear the magic happen</p>
+            
+            <div class="demo-card">
+                <div class="tts-form">
+                    <div class="input-group">
+                        <label for="textInput" class="input-label">Your Text</label>
+                        <textarea id="textInput" placeholder="Type or paste your text here." rows="4"></textarea>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="voiceSelect" class="input-label">Select Voice</label>
+                        <select id="voiceSelect" class="voice-selector">
+                            <option value="en-US-terrell">Terrell - Professional Male Voice</option>
+                        </select>
+                    </div>
+                    
+                    <button id="generateBtn" class="btn btn-generate">
+                        <span class="btn-text">Generate Speech</span>
+                        <span class="btn-loading">Generating...</span>
+                    </button>
+                </div>
+                
+                <div class="audio-section">
+                    <div id="ttsOutput" class="status-message"></div>
+                    <audio id="audioPlayer" controls preload="none">
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+
+        <div class="footer-bottom">
+            <p>&copy; 2025 Text to Voice. All rights reserved. | <span id="healthStatus" class="health-indicator">🟢 System Operational</span></p>
+        </div>
+    </footer>
 
     <script src="/static/script.js"></script>
 </body>
