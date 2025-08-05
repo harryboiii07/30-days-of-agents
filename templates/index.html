@@ -79,6 +79,47 @@
         </div>
     </section>
 
+    <!-- Echo Bot Section -->
+    <section id="echo-bot" class="echo-bot-section">
+        <div class="container">
+            <h2 class="section-title">Echo Bot</h2>
+            <p class="section-subtitle">Record your voice and hear it played back instantly</p>
+            
+            <div class="echo-bot-card">
+                <div class="recording-controls">
+                    <div class="recording-status">
+                        <div id="recordingIndicator" class="recording-indicator">
+                            <div class="pulse-ring"></div>
+                            <div class="pulse-dot"></div>
+                        </div>
+                        <div class="status-text">
+                            <h3 id="recordingStatus">Ready to Record</h3>
+                            <p id="recordingTime">00:00</p>
+                        </div>
+                    </div>
+                    
+                    <div class="control-buttons">
+                        <button id="startRecordBtn" class="btn btn-record">
+                            <span class="btn-icon">🎤</span>
+                            <span class="btn-text">Start Recording</span>
+                        </button>
+                        <button id="stopRecordBtn" class="btn btn-stop" disabled>
+                            <span class="btn-icon">⏹️</span>
+                            <span class="btn-text">Stop Recording</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="playback-section">
+                    <div id="echoOutput" class="status-message"></div>
+                    <audio id="echoPlayer" controls preload="none">
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Footer -->
     <footer class="footer">
 

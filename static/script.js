@@ -27,6 +27,24 @@ function initializePage() {
         });
     }
 
+    // Echo Bot functionality
+    const startRecordBtn = document.getElementById('startRecordBtn');
+    const stopRecordBtn = document.getElementById('stopRecordBtn');
+    
+    if (startRecordBtn && stopRecordBtn) {
+        startRecordBtn.addEventListener('click', startRecording);
+        stopRecordBtn.addEventListener('click', stopRecording);
+        
+        // Set initial button states
+        updateRecordingUI();
+        
+        // Check browser support
+        if (!checkEchoBotSupport()) {
+            startRecordBtn.disabled = true;
+            stopRecordBtn.disabled = true;
+        }
+    }
+
     // Smooth scrolling for navigation links
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function (e) {
@@ -144,6 +162,166 @@ function showStatusMessage(message, type = "loading") {
             }, 5000);
         }
     }
+}
+
+// Echo Bot Variables
+let mediaRecorder = null;
+let recordedChunks = [];
+let recording = false;
+let recordingTimer = null;
+let recordingStartTime = 0;
+
+async function startRecording() {
+    try {
+        // Request microphone access
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            } 
+        });
+        
+        // Initialize MediaRecorder
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(stream, {
+            mimeType: 'audio/webm;codecs=opus'
+        });
+        
+        // Set up event handlers
+        mediaRecorder.ondataavailable = function(event) {
+            if (event.data.size > 0) {
+                recordedChunks.push(event.data);
+            }
+        };
+        
+        mediaRecorder.onstop = function() {
+            // Create audio blob and URL
+            const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+            const audioUrl = URL.createObjectURL(blob);
+            
+            // Set up audio player
+            const echoPlayer = document.getElementById('echoPlayer');
+            echoPlayer.src = audioUrl;
+            echoPlayer.style.display = 'block';
+            
+            // Show success message
+            showEchoStatus('🎉 Recording complete! Click play to hear your echo.', 'success');
+            
+            // Stop all tracks to free up microphone
+            stream.getTracks().forEach(track => track.stop());
+        };
+        
+        // Start recording
+        mediaRecorder.start();
+        recording = true;
+        recordingStartTime = Date.now();
+        
+        // Update UI
+        updateRecordingUI();
+        showEchoStatus('🎤 Recording... Speak into your microphone!', 'loading');
+        
+        // Start timer
+        startRecordingTimer();
+        
+    } catch (error) {
+        console.error('Error accessing microphone:', error);
+        showEchoStatus('❌ Error: Could not access microphone. Please check permissions.', 'error');
+    }
+}
+
+function stopRecording() {
+    if (mediaRecorder && recording) {
+        mediaRecorder.stop();
+        recording = false;
+        
+        // Update UI
+        updateRecordingUI();
+        showEchoStatus('⏳ Processing recording...', 'loading');
+        
+        // Stop timer
+        stopRecordingTimer();
+    }
+}
+
+function updateRecordingUI() {
+    const startBtn = document.getElementById('startRecordBtn');
+    const stopBtn = document.getElementById('stopRecordBtn');
+    const indicator = document.getElementById('recordingIndicator');
+    const status = document.getElementById('recordingStatus');
+    
+    if (recording) {
+        // During recording: disable start, enable stop
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        indicator.classList.add('recording');
+        status.textContent = 'Recording...';
+    } else {
+        // Not recording: enable start, disable stop
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        indicator.classList.remove('recording');
+        status.textContent = 'Ready to Record';
+    }
+}
+
+function startRecordingTimer() {
+    const timeDisplay = document.getElementById('recordingTime');
+    
+    recordingTimer = setInterval(() => {
+        const elapsed = Date.now() - recordingStartTime;
+        const seconds = Math.floor(elapsed / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        
+        const timeString = `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        timeDisplay.textContent = timeString;
+    }, 100);
+}
+
+function stopRecordingTimer() {
+    if (recordingTimer) {
+        clearInterval(recordingTimer);
+        recordingTimer = null;
+    }
+    
+    // Reset timer display
+    setTimeout(() => {
+        document.getElementById('recordingTime').textContent = '00:00';
+    }, 2000);
+}
+
+function showEchoStatus(message, type = "loading") {
+    const echoOutput = document.getElementById('echoOutput');
+    if (echoOutput) {
+        echoOutput.textContent = message;
+        echoOutput.className = `status-message ${type}`;
+        
+        // Auto-hide success messages after 5 seconds
+        if (type === "success") {
+            setTimeout(() => {
+                if (echoOutput.textContent === message) {
+                    echoOutput.textContent = "";
+                    echoOutput.className = "status-message";
+                }
+            }, 5000);
+        }
+    }
+}
+
+// Check for MediaRecorder support
+function checkEchoBotSupport() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showEchoStatus('❌ Your browser does not support audio recording.', 'error');
+        return false;
+    }
+    
+    if (!window.MediaRecorder) {
+        showEchoStatus('❌ Your browser does not support MediaRecorder API.', 'error');
+        return false;
+    }
+    
+    return true;
 }
 
 console.log("🚀 VoiceForge platform ready!");
