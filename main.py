@@ -1,10 +1,13 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import uvicorn
 import os
+import shutil
+from datetime import datetime
+from pathlib import Path
 from dotenv import load_dotenv
 from murf import Murf
 
@@ -12,7 +15,11 @@ from murf import Murf
 load_dotenv()
 
 # Create FastAPI app instance
-app = FastAPI(title="30 Days of Voice Agents", version="1.0.0")
+app = FastAPI(title="VoiceForge - Text-to-Speech Platform", version="1.0.0")
+
+# Create uploads directory if it doesn't exist
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 # Pydantic models for TTS API
 class TTSRequest(BaseModel):
@@ -72,6 +79,54 @@ async def generate_speech(request: TTSRequest):
     except Exception as e:
         # Handle any errors from the SDK
         raise HTTPException(status_code=500, detail=f"Error generating speech: {str(e)}") from e
+
+@app.post("/api/upload-audio")
+async def upload_audio(audio_file: UploadFile = File(...)):
+    """
+    Upload and temporarily save an audio file
+    
+    - **audio_file**: The audio file to upload (WebM, WAV, MP3, etc.)
+    
+    Returns file information including name, content type, and size
+    """
+    try:
+        # Validate file type
+        allowed_types = ["audio/webm", "audio/wav", "audio/mp3", "audio/mpeg", "audio/ogg"]
+        if audio_file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unsupported file type: {audio_file.content_type}. Allowed types: {', '.join(allowed_types)}"
+            )
+        
+        # Generate unique filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_extension = ".webm" if audio_file.content_type == "audio/webm" else ".wav"
+        filename = f"recording_{timestamp}{file_extension}"
+        file_path = UPLOAD_DIR / filename
+        
+        # Save file to uploads directory
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(audio_file.file, buffer)
+        
+        # Get file size
+        file_size = file_path.stat().st_size
+        
+        return {
+            "success": True,
+            "filename": filename,
+            "content_type": audio_file.content_type,
+            "size_bytes": file_size,
+            "size_mb": round(file_size / (1024 * 1024), 2),
+            "upload_time": datetime.now().isoformat(),
+            "message": f"Audio file '{filename}' uploaded successfully ({round(file_size / 1024, 1)} KB)"
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # Handle any other errors
+        raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}") from e
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

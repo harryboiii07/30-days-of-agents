@@ -206,3 +206,10 @@ cache/
 # Screenshots (for development testing)
 screenshots/
 test_screenshots/
+
+# Audio uploads folder
+uploads/
+*.webm
+*.wav
+*.mp3
+*.ogg

@@ -113,8 +113,8 @@ async function generateSpeech() {
             })
         });
         
-        const data = await response.json();
-        
+                const data = await response.json();
+                
         if (response.ok && data.success) {
             showStatusMessage(`✅ Audio generated successfully! Click play to listen.`, "success");
             
@@ -132,7 +132,7 @@ async function generateSpeech() {
             } catch (autoplayError) {
                 console.log("Autoplay prevented by browser - user can click play manually");
             }
-        } else {
+                } else {
             const errorMessage = data.detail || data.message || "Unknown error occurred";
             showStatusMessage(`❌ Error: ${errorMessage}`, "error");
         }
@@ -205,8 +205,11 @@ async function startRecording() {
             echoPlayer.src = audioUrl;
             echoPlayer.style.display = 'block';
             
-            // Show success message
-            showEchoStatus('🎉 Recording complete! Click play to hear your echo.', 'success');
+            // Show processing message
+            showEchoStatus('🎉 Recording complete! Uploading to server...', 'loading');
+            
+            // Upload audio file to server
+            uploadAudioFile(blob);
             
             // Stop all tracks to free up microphone
             stream.getTracks().forEach(track => track.stop());
@@ -322,6 +325,54 @@ function checkEchoBotSupport() {
     }
     
     return true;
+}
+
+// Upload audio file to server
+async function uploadAudioFile(audioBlob) {
+    try {
+        // Create FormData for file upload
+        const formData = new FormData();
+        formData.append('audio_file', audioBlob, 'recording.webm');
+        
+        // Show upload progress
+        showEchoStatus('📤 Uploading audio file to server...', 'loading');
+        
+        // Upload to server
+        const response = await fetch('/api/upload-audio', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+            // Show success message with file details
+            const fileSize = result.size_mb > 1 
+                ? `${result.size_mb} MB` 
+                : `${Math.round(result.size_bytes / 1024)} KB`;
+            
+            // Create JSON response display
+            const responseJson = `✅ Upload successful! File: ${result.filename} (${fileSize})
+
+📊 Server Response (JSON):
+${JSON.stringify(result, null, 2)}
+
+Click play to hear your echo.`;
+            
+            showEchoStatus(responseJson, 'success');
+            
+            console.log('📊 Full Upload API Response:', result);
+        } else {
+            throw new Error(result.detail || result.message || 'Upload failed');
+        }
+        
+    } catch (error) {
+        console.error('Upload error:', error);
+        showEchoStatus(
+            `❌ Upload failed: ${error.message}. Audio is still playable locally.`, 
+            'error'
+        );
+    }
 }
 
 console.log("🚀 VoiceForge platform ready!");
