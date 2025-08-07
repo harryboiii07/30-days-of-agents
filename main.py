@@ -10,9 +10,13 @@ from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 from murf import Murf
+import assemblyai as aai
 
 # Load environment variables
 load_dotenv()
+
+# Configure AssemblyAI
+aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY", "e6136224990d49f494f6bcf658569b7c")
 
 # Create FastAPI app instance
 app = FastAPI(title="VoiceForge - Text-to-Speech Platform", version="1.0.0")
@@ -127,6 +131,63 @@ async def upload_audio(audio_file: UploadFile = File(...)):
     except Exception as e:
         # Handle any other errors
         raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}") from e
+
+@app.post("/transcribe/file")
+async def transcribe_file(audio_file: UploadFile = File(...)):
+    """
+    Transcribe an audio file using AssemblyAI
+    
+    - **audio_file**: The audio file to transcribe (WebM, WAV, MP3, etc.)
+    
+    Returns the transcription text
+    """
+    try:
+        # Validate file type
+        allowed_types = ["audio/webm", "audio/wav", "audio/mp3", "audio/mpeg", "audio/ogg"]
+        if audio_file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unsupported file type: {audio_file.content_type}. Allowed types: {', '.join(allowed_types)}"
+            )
+        
+        # Read the file content directly into memory
+        audio_data = await audio_file.read()
+        
+        # Configure transcription settings
+        config = aai.TranscriptionConfig(
+            speech_model=aai.SpeechModel.best,
+            language_detection=True,
+            punctuate=True,
+            format_text=True
+        )
+        
+        # Create transcriber and transcribe the audio data
+        transcriber = aai.Transcriber(config=config)
+        transcript = transcriber.transcribe(audio_data)
+        
+        # Check for transcription errors
+        if transcript.status == "error":
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Transcription failed: {transcript.error}"
+            )
+        
+        # Return successful response
+        return {
+            "success": True,
+            "transcription": transcript.text,
+            "confidence": getattr(transcript, 'confidence', None),
+            "language": getattr(transcript, 'language_code', None),
+            "processing_time": getattr(transcript, 'audio_duration', None),
+            "message": "Audio transcribed successfully"
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # Handle any other errors
+        raise HTTPException(status_code=500, detail=f"Error transcribing audio: {str(e)}") from e
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

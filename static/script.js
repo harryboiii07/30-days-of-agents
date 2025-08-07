@@ -206,10 +206,10 @@ async function startRecording() {
             echoPlayer.style.display = 'block';
             
             // Show processing message
-            showEchoStatus('🎉 Recording complete! Uploading to server...', 'loading');
+            showEchoStatus('🎉 Recording complete! Transcribing audio...', 'loading');
             
-            // Upload audio file to server
-            uploadAudioFile(blob);
+            // Transcribe audio file
+            transcribeAudioFile(blob);
             
             // Stop all tracks to free up microphone
             stream.getTracks().forEach(track => track.stop());
@@ -300,14 +300,14 @@ function showEchoStatus(message, type = "loading") {
         echoOutput.textContent = message;
         echoOutput.className = `status-message ${type}`;
         
-        // Auto-hide success messages after 5 seconds
+        // Auto-hide success messages after 15 seconds (increased for transcription results)
         if (type === "success") {
             setTimeout(() => {
                 if (echoOutput.textContent === message) {
                     echoOutput.textContent = "";
                     echoOutput.className = "status-message";
                 }
-            }, 5000);
+            }, 15000);
         }
     }
 }
@@ -327,18 +327,18 @@ function checkEchoBotSupport() {
     return true;
 }
 
-// Upload audio file to server
-async function uploadAudioFile(audioBlob) {
+// Transcribe audio file using AssemblyAI
+async function transcribeAudioFile(audioBlob) {
     try {
-        // Create FormData for file upload
+        // Create FormData for transcription
         const formData = new FormData();
         formData.append('audio_file', audioBlob, 'recording.webm');
         
-        // Show upload progress
-        showEchoStatus('📤 Uploading audio file to server...', 'loading');
+        // Show transcription progress
+        showEchoStatus('🎤 Transcribing audio with AssemblyAI...', 'loading');
         
-        // Upload to server
-        const response = await fetch('/api/upload-audio', {
+        // Send to transcription endpoint
+        const response = await fetch('/transcribe/file', {
             method: 'POST',
             body: formData
         });
@@ -346,33 +346,38 @@ async function uploadAudioFile(audioBlob) {
         const result = await response.json();
         
         if (response.ok && result.success) {
-            // Show success message with file details
-            const fileSize = result.size_mb > 1 
-                ? `${result.size_mb} MB` 
-                : `${Math.round(result.size_bytes / 1024)} KB`;
+            // Show transcription result
+            const transcriptionText = result.transcription || "No speech detected";
+            const confidence = result.confidence ? `(Confidence: ${Math.round(result.confidence * 100)}%)` : "";
+            const language = result.language ? `Language: ${result.language}` : "";
             
-            // Create JSON response display
-            const responseJson = `✅ Upload successful! File: ${result.filename} (${fileSize})
+            const transcriptionDisplay = `✅ Transcription Complete!
 
-📊 Server Response (JSON):
-${JSON.stringify(result, null, 2)}
+🎯 Transcribed Text:
+"${transcriptionText}"
 
-Click play to hear your echo.`;
+📊 Details:
+${language}
+${confidence}
+
+🎵 Click play to hear your recording.`;
             
-            showEchoStatus(responseJson, 'success');
+            showEchoStatus(transcriptionDisplay, 'success');
             
-            console.log('📊 Full Upload API Response:', result);
+            console.log('🎤 Full Transcription API Response:', result);
         } else {
-            throw new Error(result.detail || result.message || 'Upload failed');
+            throw new Error(result.detail || result.message || 'Transcription failed');
         }
         
     } catch (error) {
-        console.error('Upload error:', error);
+        console.error('Transcription error:', error);
         showEchoStatus(
-            `❌ Upload failed: ${error.message}. Audio is still playable locally.`, 
+            `❌ Transcription failed: ${error.message}. Audio is still playable.`, 
             'error'
         );
     }
 }
+
+
 
 console.log("🚀 VoiceForge platform ready!");
