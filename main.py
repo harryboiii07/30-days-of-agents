@@ -5,8 +5,6 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import uvicorn
 import os
-import shutil
-from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 from murf import Murf
@@ -140,6 +138,64 @@ async def transcribe_file(audio_file: UploadFile = File(...)):
     except Exception as e:
         # Handle any other errors
         raise HTTPException(status_code=500, detail=f"Error transcribing audio: {str(e)}") from e
+
+@app.post("/tts/echo")
+async def echo_with_tts(audio_file: UploadFile = File(...)):
+    """
+    Echo Bot v2: Transcribe audio and generate speech using Murf TTS
+    
+    - **audio_file**: The audio file to transcribe and echo back with Murf voice
+    
+    Returns the Murf-generated audio URL
+    """
+    try:
+        print("🎤 Starting Echo Bot v2 processing...")
+        
+        # Step 1: Use existing transcription endpoint
+        print("🎤 Transcribing audio using existing /transcribe/file endpoint...")
+        transcription_result = await transcribe_file(audio_file)
+        
+        # Check if transcription was successful
+        if not transcription_result.get("success") or not transcription_result.get("transcription"):
+            raise HTTPException(
+                status_code=400,
+                detail="Transcription failed or no speech detected. Please try speaking more clearly."
+            )
+        
+        transcription_text = transcription_result["transcription"]
+        print(f"✅ Transcription successful: {transcription_text}")
+        
+        # Step 2: Use existing TTS endpoint to generate speech
+        print("🎵 Generating speech using existing /api/tts endpoint...")
+        
+        # Create TTS request object
+        tts_request = TTSRequest(
+            text=transcription_text,
+            voice_id="en-US-terrell"  # Default voice for echo
+        )
+        
+        # Use existing TTS function
+        tts_result = await generate_speech(tts_request)
+        
+        print(f"✅ Murf TTS successful: {tts_result['audio_file']}")
+        
+        # Return the response with both transcription and audio URL
+        return {
+            "success": True,
+            "transcription": transcription_text,
+            "audio_file": tts_result["audio_file"],
+            "confidence": transcription_result.get("confidence"),
+            "language": transcription_result.get("language"),
+            "message": "Audio transcribed and converted to speech successfully. The audio link will be available for 72 hours."
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # Handle any other errors
+        print(f"❌ Echo TTS Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}") from e
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

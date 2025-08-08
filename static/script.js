@@ -196,20 +196,14 @@ async function startRecording() {
         };
         
         mediaRecorder.onstop = function() {
-            // Create audio blob and URL
+            // Create audio blob
             const blob = new Blob(recordedChunks, { type: 'audio/webm' });
-            const audioUrl = URL.createObjectURL(blob);
-            
-            // Set up audio player
-            const echoPlayer = document.getElementById('echoPlayer');
-            echoPlayer.src = audioUrl;
-            echoPlayer.style.display = 'block';
             
             // Show processing message
-            showEchoStatus('🎉 Recording complete! Transcribing audio...', 'loading');
+            showEchoStatus('🎉 Recording complete! Processing with Echo Bot ...', 'loading');
             
-            // Transcribe audio file
-            transcribeAudioFile(blob);
+            // Process with Echo Bot v2 (transcribe + TTS)
+            processEchoBot(blob);
             
             // Stop all tracks to free up microphone
             stream.getTracks().forEach(track => track.stop());
@@ -327,18 +321,18 @@ function checkEchoBotSupport() {
     return true;
 }
 
-// Transcribe audio file using AssemblyAI
-async function transcribeAudioFile(audioBlob) {
+// Process audio through Echo Bot v2 (transcribe + TTS)
+async function processEchoBot(audioBlob) {
     try {
-        // Create FormData for transcription
+        // Create FormData for echo processing
         const formData = new FormData();
         formData.append('audio_file', audioBlob, 'recording.webm');
         
-        // Show transcription progress
+        // Show processing progress
         showEchoStatus('🎤 Transcribing audio with AssemblyAI...', 'loading');
         
-        // Send to transcription endpoint
-        const response = await fetch('/transcribe/file', {
+        // Send to echo TTS endpoint
+        const response = await fetch('/tts/echo', {
             method: 'POST',
             body: formData
         });
@@ -346,33 +340,50 @@ async function transcribeAudioFile(audioBlob) {
         const result = await response.json();
         
         if (response.ok && result.success) {
-            // Show transcription result
+            // Show success message with transcription
             const transcriptionText = result.transcription || "No speech detected";
             const confidence = result.confidence ? `(Confidence: ${Math.round(result.confidence * 100)}%)` : "";
             const language = result.language ? `Language: ${result.language}` : "";
             
-            const transcriptionDisplay = `✅ Transcription Complete!
+            // Update status to show TTS generation
+            showEchoStatus('🎵 Generating speech with Murf AI...', 'loading');
+            
+            // Set up audio player with Murf-generated audio
+            const echoPlayer = document.getElementById('echoPlayer');
+            echoPlayer.src = result.audio_file;
+            echoPlayer.style.display = 'block';
+            
+            // Show final result
+            const echoDisplay = `✅ Echo Bot v2 Complete!
 
-🎯 Transcribed Text:
+🎯 You said:
 "${transcriptionText}"
 
 📊 Details:
 ${language}
 ${confidence}
 
-🎵 Click play to hear your recording.`;
+🎵 Click play to hear your echo in Murf voice!`;
             
-            showEchoStatus(transcriptionDisplay, 'success');
+            showEchoStatus(echoDisplay, 'success');
             
-            console.log('🎤 Full Transcription API Response:', result);
+            // Auto-play the Murf audio (if allowed by browser)
+            try {
+                await echoPlayer.play();
+                console.log("Echo audio started playing automatically");
+            } catch (autoplayError) {
+                console.log("Autoplay prevented by browser - user can click play manually");
+            }
+            
+            console.log('🎤 Full Echo Bot v2 API Response:', result);
         } else {
-            throw new Error(result.detail || result.message || 'Transcription failed');
+            throw new Error(result.detail || result.message || 'Echo processing failed');
         }
         
     } catch (error) {
-        console.error('Transcription error:', error);
+        console.error('Echo Bot v2 error:', error);
         showEchoStatus(
-            `❌ Transcription failed: ${error.message}. Audio is still playable.`, 
+            `❌ Echo Bot v2 failed: ${error.message}. Please try again.`, 
             'error'
         );
     }
