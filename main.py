@@ -39,6 +39,50 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Set up templates directory
 templates = Jinja2Templates(directory="templates")
 
+def trim_text_for_tts(text: str, max_chars: int = 3000) -> str:
+    """
+    Trim text to fit within Murf TTS character limits while preserving sentence structure
+    
+    - **text**: The text to trim
+    - **max_chars**: Maximum character limit (default: 3000 for Murf)
+    
+    Returns trimmed text that ends at a complete sentence when possible
+    """
+    if len(text) <= max_chars:
+        return text
+    
+    # Find the last complete sentence within the limit
+    # Look for sentence endings: . ! ?
+    sentence_endings = ['.', '!', '?']
+    
+    # Start from the max_chars position and work backwards
+    for i in range(max_chars - 1, max_chars // 2, -1):
+        if text[i] in sentence_endings:
+            # Check if this is actually the end of a sentence (not an abbreviation)
+            # Simple heuristic: if followed by space and capital letter, it's likely a sentence end
+            if i + 1 < len(text) and (i + 1 == len(text) or (text[i + 1] == ' ' and i + 2 < len(text) and text[i + 2].isupper())):
+                trimmed = text[:i + 1].strip()
+                if len(trimmed) > 50:  # Ensure we have a reasonable amount of text
+                    return trimmed
+    
+    # If no good sentence break found, look for paragraph breaks
+    for i in range(max_chars - 1, max_chars // 2, -1):
+        if text[i] == '\n':
+            trimmed = text[:i].strip()
+            if len(trimmed) > 50:
+                return trimmed
+    
+    # If no good break found, just cut at word boundary
+    # Find the last space before the limit
+    for i in range(max_chars - 1, max_chars // 2, -1):
+        if text[i] == ' ':
+            trimmed = text[:i].strip()
+            if len(trimmed) > 50:
+                return trimmed + "..."
+    
+    # Last resort: hard cut with ellipsis
+    return text[:max_chars - 3].strip() + "..."
+
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     """Serve the main index page"""
@@ -203,18 +247,45 @@ async def echo_with_tts(audio_file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}") from e
 
 @app.post("/llm/query")
-async def llm_query(request: LLMRequest):
+async def llm_query(audio_file: UploadFile = File(None), request: LLMRequest = None):
     """
-    Query the Gemini LLM API with text input
+    Query the Gemini LLM API with text or audio input
     
-    - **text**: The text input to send to the LLM
+    - **audio_file**: Optional audio file to transcribe and send to LLM
+    - **request**: Optional text input to send to the LLM (for backward compatibility)
     
-    Returns the LLM response along with the complete API response details
+    Returns the LLM response along with Murf-generated audio
     """
     try:
-        # Validate input
-        if len(request.text.strip()) == 0:
-            raise HTTPException(status_code=400, detail="Text cannot be empty")
+        input_text = ""
+        
+        # Handle audio input
+        if audio_file:
+            print("🎤 Processing audio input for AI Voice Chatbot...")
+            
+            # Step 1: Transcribe the audio
+            print("🎤 Transcribing audio using existing transcribe_file function...")
+            transcription_result = await transcribe_file(audio_file)
+            
+            # Check if transcription was successful
+            if not transcription_result.get("success") or not transcription_result.get("transcription"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Transcription failed or no speech detected. Please try speaking more clearly."
+                )
+            
+            input_text = transcription_result["transcription"]
+            print(f"✅ Transcription successful: {input_text}")
+            
+        # Handle text input (for backward compatibility)
+        elif request and request.text:
+            input_text = request.text.strip()
+            
+        # Validate we have input
+        if not input_text:
+            raise HTTPException(status_code=400, detail="No text or audio input provided")
+        
+        print(f"🤖 Sending to LLM: {input_text}")
         
         # Get API key from environment
         api_key = os.getenv("GEMINI_API_KEY")
@@ -227,17 +298,44 @@ async def llm_query(request: LLMRequest):
         # Generate response using Gemini API
         response = client.models.generate_content(
             model="gemini-2.0-flash-exp",
-            contents=request.text
+            contents=input_text
         )
         
         # Extract response text
         response_text = response.text if hasattr(response, 'text') else str(response)
+        print(f"🤖 LLM Response: {response_text}")
         
-        # Return both the text response and complete response object
-        return {
+        # If audio input was provided, generate audio response using Murf
+        audio_file_url = None
+        if audio_file:
+            print("🎵 Generating speech response using Murf TTS...")
+            
+            # Trim response text for Murf TTS (3,000 character limit)
+            original_length = len(response_text)
+            trimmed_response = trim_text_for_tts(response_text)
+            
+            if len(trimmed_response) < original_length:
+                print(f"⚠️ AI response trimmed from {original_length} to {len(trimmed_response)} characters for TTS")
+            
+            # Create TTS request object with trimmed text
+            tts_request = TTSRequest(
+                text=trimmed_response,
+                voice_id="en-US-terrell"  # Default voice for AI responses
+            )
+            
+            # Use existing TTS function (echo_with_tts logic)
+            tts_result = await generate_speech(tts_request)
+            audio_file_url = tts_result["audio_file"]
+            print(f"✅ Murf TTS successful: {audio_file_url}")
+            
+            # Update response_text to reflect what was actually spoken
+            response_text = trimmed_response
+        
+        # Return comprehensive response
+        response_data = {
             "success": True,
             "response_text": response_text,
-            "input_text": request.text,
+            "input_text": input_text,
             "complete_response": {
                 "model": "gemini-2.0-flash-exp",
                 "text": response_text,
@@ -246,6 +344,16 @@ async def llm_query(request: LLMRequest):
             "message": "LLM query processed successfully"
         }
         
+        # Add audio file URL if audio was processed
+        if audio_file_url:
+            response_data["audio_file"] = audio_file_url
+            response_data["message"] = "Audio transcribed, processed by LLM, and converted to speech successfully. The audio link will be available for 72 hours."
+        
+        return response_data
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
         # Handle any errors from the SDK or processing
         print(f"❌ LLM Query Error: {str(e)}")

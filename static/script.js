@@ -217,9 +217,9 @@ async function startRecording() {
             const blob = new Blob(recordedChunks, { type: 'audio/webm' });
             
             // Show processing message
-            showEchoStatus('🎉 Recording complete! Processing with Echo Bot ...', 'loading');
+            showEchoStatus('🎉 Recording complete! Processing with AI Voice Chatbot...', 'loading');
             
-            // Process with Echo Bot v2 (transcribe + TTS)
+            // Process with AI Voice Chatbot (transcribe + LLM + TTS)
             processEchoBot(blob);
             
             // Stop all tracks to free up microphone
@@ -338,18 +338,18 @@ function checkEchoBotSupport() {
     return true;
 }
 
-// Process audio through Echo Bot v2 (transcribe + TTS)
+// Process audio through AI Voice Chatbot (transcribe + LLM + TTS)
 async function processEchoBot(audioBlob) {
     try {
-        // Create FormData for echo processing
+        // Create FormData for AI voice chatbot processing
         const formData = new FormData();
         formData.append('audio_file', audioBlob, 'recording.webm');
         
         // Show processing progress
         showEchoStatus('🎤 Transcribing audio with AssemblyAI...', 'loading');
         
-        // Send to echo TTS endpoint
-        const response = await fetch('/tts/echo', {
+        // Send to LLM query endpoint
+        const response = await fetch('/llm/query', {
             method: 'POST',
             body: formData
         });
@@ -357,50 +357,58 @@ async function processEchoBot(audioBlob) {
         const result = await response.json();
         
         if (response.ok && result.success) {
-            // Show success message with transcription
-            const transcriptionText = result.transcription || "No speech detected";
-            const confidence = result.confidence ? `(Confidence: ${Math.round(result.confidence * 100)}%)` : "";
-            const language = result.language ? `Language: ${result.language}` : "";
+            // Show processing stages
+            const transcriptionText = result.input_text || "No speech detected";
+            const aiResponse = result.response_text || "No AI response generated";
+            
+            // Update status to show LLM processing
+            showEchoStatus('🤖 AI is processing your question...', 'loading');
+            
+            // Brief delay to show LLM processing
+            await new Promise(resolve => setTimeout(resolve, 1000));
             
             // Update status to show TTS generation
-            showEchoStatus('🎵 Generating speech with Murf AI...', 'loading');
+            showEchoStatus('🎵 Generating AI response with Murf voice...', 'loading');
             
-            // Set up audio player with Murf-generated audio
+            // Set up audio player with Murf-generated AI response
             const echoPlayer = document.getElementById('echoPlayer');
-            echoPlayer.src = result.audio_file;
-            echoPlayer.style.display = 'block';
-            
-            // Show final result
-            const echoDisplay = `✅ Echo Bot v2 Complete!
-
-🎯 You said:
-"${transcriptionText}"
-
-📊 Details:
-${language}
-${confidence}
-
-🎵 Click play to hear your echo in Murf voice!`;
-            
-            showEchoStatus(echoDisplay, 'success');
-            
-            // Auto-play the Murf audio (if allowed by browser)
-            try {
-                await echoPlayer.play();
-                console.log("Echo audio started playing automatically");
-            } catch (autoplayError) {
-                console.log("Autoplay prevented by browser - user can click play manually");
+            if (result.audio_file) {
+                echoPlayer.src = result.audio_file;
+                echoPlayer.style.display = 'block';
             }
             
-            console.log('🎤 Full Echo Bot v2 API Response:', result);
+            // Show final result
+            const chatbotDisplay = `✅ AI Voice Chatbot Complete!
+
+🎯 You asked:
+"${transcriptionText}"
+
+🤖 AI Response:
+"${aiResponse}"
+
+🎵 Click play to hear the AI response!`;
+            
+            showEchoStatus(chatbotDisplay, 'success');
+            
+            // Auto-play the AI response audio (if allowed by browser)
+            if (result.audio_file) {
+                try {
+                    await echoPlayer.play();
+                    console.log("AI response audio started playing automatically");
+                } catch (autoplayError) {
+                    console.log("Autoplay prevented by browser - user can click play manually");
+                }
+            }
+            
+            console.log('🤖 Full AI Voice Chatbot API Response:', result);
         } else {
-            throw new Error(result.detail || result.message || 'Echo processing failed');
+            throw new Error(result.detail || result.message || 'AI Voice Chatbot processing failed');
         }
         
     } catch (error) {
-        console.error('Echo Bot v2 error:', error);
+        console.error('AI Voice Chatbot error:', error);
         showEchoStatus(
-            `❌ Echo Bot v2 failed: ${error.message}. Please try again.`, 
+            `❌ AI Voice Chatbot failed: ${error.message}. Please try again.`, 
             'error'
         );
     }
