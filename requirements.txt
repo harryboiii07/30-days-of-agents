@@ -5,3 +5,4 @@ python-dotenv==1.0.0
 murf
 pydantic==2.4.2
 assemblyai
+google-genai

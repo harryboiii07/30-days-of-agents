@@ -45,6 +45,23 @@ function initializePage() {
         }
     }
 
+    // Q&A functionality
+    const questionInput = document.getElementById('questionInput');
+    const askBtn = document.getElementById('askBtn');
+    const responseOutput = document.getElementById('responseOutput');
+    
+    if (questionInput && askBtn && responseOutput) {
+        askBtn.addEventListener('click', askQuestion);
+        
+        // Allow Enter to ask question (Ctrl+Enter or Cmd+Enter)
+        questionInput.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                askQuestion();
+            }
+        });
+    }
+
     // Smooth scrolling for navigation links
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function (e) {
@@ -389,6 +406,71 @@ ${confidence}
     }
 }
 
-
+// Simple Q&A Function
+async function askQuestion() {
+    const questionInput = document.getElementById('questionInput');
+    const askBtn = document.getElementById('askBtn');
+    const responseOutput = document.getElementById('responseOutput');
+    const completeResponse = document.getElementById('completeResponse');
+    
+    try {
+        const question = questionInput.value.trim();
+        
+        if (!question) {
+            responseOutput.textContent = "Please enter a question first.";
+            return;
+        }
+        
+        // Show loading state
+        askBtn.disabled = true;
+        responseOutput.textContent = "🤖 AI is thinking...";
+        completeResponse.textContent = "";
+        
+        // Make API request to LLM endpoint
+        const response = await fetch('/llm/query', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                text: question
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            // Show AI response
+            responseOutput.textContent = data.response_text;
+            
+            // Show complete API response
+            const formattedResponse = {
+                input: data.input_text,
+                model: data.complete_response.model,
+                response_text: data.response_text,
+                success: data.success,
+                message: data.message,
+                timestamp: new Date().toISOString(),
+                complete_api_response: data.complete_response
+            };
+            
+            completeResponse.textContent = JSON.stringify(formattedResponse, null, 2);
+            
+            console.log('🤖 LLM Response:', data);
+        } else {
+            const errorMessage = data.detail || data.message || "Sorry, I couldn't process your request right now.";
+            responseOutput.textContent = `❌ Error: ${errorMessage}`;
+            completeResponse.textContent = JSON.stringify(data, null, 2);
+        }
+        
+    } catch (error) {
+        console.error('AI Question Error:', error);
+        responseOutput.textContent = `❌ Network Error: ${error.message}. Please check your connection and try again.`;
+        completeResponse.textContent = `Error: ${error.message}`;
+    } finally {
+        // Reset button state
+        askBtn.disabled = false;
+    }
+}
 
 console.log("🚀 VoiceForge platform ready!");

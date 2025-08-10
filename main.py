@@ -9,6 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from murf import Murf
 import assemblyai as aai
+from google import genai
 
 # Load environment variables
 load_dotenv()
@@ -27,6 +28,10 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 class TTSRequest(BaseModel):
     text: str
     voice_id: str = "en-US-terrell"
+
+# Pydantic model for LLM API
+class LLMRequest(BaseModel):
+    text: str
 
 # Mount static files directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -196,6 +201,55 @@ async def echo_with_tts(audio_file: UploadFile = File(...)):
         # Handle any other errors
         print(f"❌ Echo TTS Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}") from e
+
+@app.post("/llm/query")
+async def llm_query(request: LLMRequest):
+    """
+    Query the Gemini LLM API with text input
+    
+    - **text**: The text input to send to the LLM
+    
+    Returns the LLM response along with the complete API response details
+    """
+    try:
+        # Validate input
+        if len(request.text.strip()) == 0:
+            raise HTTPException(status_code=400, detail="Text cannot be empty")
+        
+        # Get API key from environment
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable not set")
+        
+        # Initialize Gemini client
+        client = genai.Client(api_key=api_key)
+        
+        # Generate response using Gemini API
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp",
+            contents=request.text
+        )
+        
+        # Extract response text
+        response_text = response.text if hasattr(response, 'text') else str(response)
+        
+        # Return both the text response and complete response object
+        return {
+            "success": True,
+            "response_text": response_text,
+            "input_text": request.text,
+            "complete_response": {
+                "model": "gemini-2.0-flash-exp",
+                "text": response_text,
+                "raw_response": str(response)  # Full response for debugging
+            },
+            "message": "LLM query processed successfully"
+        }
+        
+    except Exception as e:
+        # Handle any errors from the SDK or processing
+        print(f"❌ LLM Query Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing LLM query: {str(e)}") from e
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

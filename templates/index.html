@@ -19,6 +19,7 @@
             </div>
             <div class="nav-links">
                 <a href="#home" class="nav-link">Home</a>
+                <a href="#chatbot" class="nav-link">AI Q&A</a>
             </div>
         </div>
     </nav>
@@ -115,6 +116,37 @@
                     <audio id="echoPlayer" controls preload="none">
                         Your browser does not support the audio element.
                     </audio>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- AI Q&A Section -->
+    <section id="chatbot" class="qa-section">
+        <div class="container">
+            <h2 class="section-title">AI Assistant</h2>
+            <p class="section-subtitle">Ask any question and get AI-powered answers from Google Gemini</p>
+            
+            <div class="qa-card">
+                <div class="qa-form">
+                    <div class="input-group">
+                        <label for="questionInput" class="input-label">Your Question</label>
+                        <textarea id="questionInput" placeholder="Ask me anything..." rows="3"></textarea>
+                    </div>
+                    
+                    <button id="askBtn" class="btn btn-ask">
+                        <span class="btn-text">Ask AI</span>
+                        <span class="btn-loading">Processing...</span>
+                    </button>
+                </div>
+                
+                <div class="response-section">
+                    <div id="responseOutput" class="response-output"></div>
+                    
+                    <div class="response-details">
+                        <h4>Complete API Response</h4>
+                        <pre id="completeResponse" class="api-response"></pre>
+                    </div>
                 </div>
             </div>
         </div>
