@@ -15,11 +15,10 @@
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">
-                <span class="logo">🎤 VoiceForge </span>
+                <span class="logo">🎤 VoiceForge AI Assistant</span>
             </div>
             <div class="nav-links">
-                <a href="#home" class="nav-link">Home</a>
-                <a href="#chatbot" class="nav-link">AI Q&A</a>
+                <a href="#voice-chatbot" class="nav-link">Voice Chat</a>
             </div>
         </div>
     </nav>
@@ -28,8 +27,8 @@
     <section id="home" class="hero">
         <div class="hero-container">
             <div class="hero-content">
-                <h1 class="hero-title">Transform Text into <span class="highlight">Natural Speech</span></h1>
-                <p class="hero-subtitle">Experience the future of text-to-speech technology with our AI-powered platform. Create professional voiceovers, audiobooks, and more with just a few clicks.</p>
+                <h1 class="hero-title">AI <span class="highlight">Voice Assistant</span></h1>
+                <p class="hero-subtitle">Have natural conversations with AI using your voice. Advanced speech recognition, intelligent responses, and natural voice synthesis all in one seamless experience.</p>
             </div>
             <div class="hero-visual">
                 <div class="sound-wave">
@@ -44,78 +43,61 @@
     </section>
 
 
-    <!-- Demo Section -->
-    <section id="demo" class="demo-section">
+    <!-- AI Voice Chatbot Section -->
+    <section id="voice-chatbot" class="voice-chatbot-section">
         <div class="container">
-            <h2 class="section-title">Try VoiceForge Now</h2>
-            <p class="section-subtitle">Enter your text below and hear the magic happen</p>
+            <h2 class="section-title">AI Voice Assistant</h2>
+            <p class="section-subtitle">Have a natural conversation with AI using your voice</p>
             
-            <div class="demo-card">
-                <div class="tts-form">
-                    <div class="input-group">
-                        <label for="textInput" class="input-label">Your Text</label>
-                        <textarea id="textInput" placeholder="Type or paste your text here." rows="4"></textarea>
+            <!-- Chat Interface -->
+            <div class="chat-container">
+                <!-- Chat Header -->
+                <div class="chat-header">
+                    <div class="session-info">
+                        <span id="sessionDisplay">Session: Loading...</span>
                     </div>
-                    
-                    <div class="input-group">
-                        <label for="voiceSelect" class="input-label">Select Voice</label>
-                        <select id="voiceSelect" class="voice-selector">
-                            <option value="en-US-terrell">Terrell - Professional Male Voice</option>
-                        </select>
-                    </div>
-                    
-                    <button id="generateBtn" class="btn btn-generate">
-                        <span class="btn-text">Generate Speech</span>
-                        <span class="btn-loading">Generating...</span>
+                    <button id="clearChatBtn" class="btn btn-clear">
+                        <span class="btn-icon">🗑️</span>
+                        <span class="btn-text">Clear Chat</span>
                     </button>
                 </div>
                 
-                <div class="audio-section">
-                    <div id="ttsOutput" class="status-message"></div>
-                    <audio id="audioPlayer" controls preload="none">
-                        Your browser does not support the audio element.
-                    </audio>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- AI Voice Chatbot Section -->
-    <section id="echo-bot" class="echo-bot-section">
-        <div class="container">
-            <h2 class="section-title">AI Voice Chatbot</h2>
-            <p class="section-subtitle">Record your voice and get intelligent AI responses</p>
-            
-            <div class="echo-bot-card">
-                <div class="recording-controls">
-                    <div class="recording-status">
-                        <div id="recordingIndicator" class="recording-indicator">
-                            <div class="pulse-ring"></div>
-                            <div class="pulse-dot"></div>
+                <!-- Chat Messages -->
+                <div class="chat-messages" id="chatMessages">
+                    <div class="welcome-message">
+                        <div class="ai-avatar">🤖</div>
+                        <div class="message-content">
+                            <div class="message-text">Hi! I'm your AI voice assistant. Press the microphone button to start our conversation!</div>
                         </div>
-                        <div class="status-text">
-                            <h3 id="recordingStatus">Ready to Record</h3>
-                            <p id="recordingTime">00:00</p>
-                        </div>
-                    </div>
-                    
-                    <div class="control-buttons">
-                        <button id="startRecordBtn" class="btn btn-record">
-                            <span class="btn-icon">🎤</span>
-                            <span class="btn-text">Start Recording</span>
-                        </button>
-                        <button id="stopRecordBtn" class="btn btn-stop" disabled>
-                            <span class="btn-icon">⏹️</span>
-                            <span class="btn-text">Stop Recording</span>
-                        </button>
                     </div>
                 </div>
                 
-                <div class="playback-section">
-                    <div id="echoOutput" class="status-message"></div>
-                    <audio id="echoPlayer" controls preload="none">
-                        Your browser does not support the audio element.
-                    </audio>
+                <!-- Progress Bar -->
+                <div class="progress-container" id="progressContainer" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">Processing...</div>
+                </div>
+                
+                <!-- Voice Controls -->
+                <div class="voice-controls">
+                    <div class="mic-container">
+                        <button id="micBtn" class="mic-button" data-state="ready">
+                            <div class="mic-icon">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                                </svg>
+                            </div>
+                            <div class="recording-indicator">
+                                <div class="pulse-ring"></div>
+                                <div class="pulse-dot"></div>
+                            </div>
+                        </button>
+                        <div class="mic-status" id="micStatus">Tap to start</div>
+                        <div class="recording-timer" id="recordingTimer">00:00</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -123,9 +105,8 @@
 
     <!-- Footer -->
     <footer class="footer">
-
         <div class="footer-bottom">
-            <p>&copy; 2025 Text to Voice. All rights reserved. | <span id="healthStatus" class="health-indicator">🟢 System Operational</span></p>
+            <p>&copy; 2025 VoiceForge AI Assistant. All rights reserved. | <span id="healthStatus" class="health-indicator">🟢 System Operational</span></p>
         </div>
     </footer>
 

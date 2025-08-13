@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, UploadFile, File
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -10,12 +10,104 @@ from dotenv import load_dotenv
 from murf import Murf
 import assemblyai as aai
 from google import genai
+from pymongo import MongoClient
+from pymongo.server_api import ServerApi
+from typing import List
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
 
 # Configure AssemblyAI
 aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY", "e6136224990d49f494f6bcf658569b7c")
+
+# Configure MongoDB with detailed debugging
+mongodb_url = os.getenv("MONGODB_URL")
+if not mongodb_url:
+    raise ValueError("MONGODB_URL environment variable not set")
+
+print("🔍 MongoDB Debug Information:")
+print(f"📍 MongoDB URL: {mongodb_url[:50]}...{mongodb_url[-10:] if len(mongodb_url) > 60 else mongodb_url}")
+print(f"🔗 URL Type: {'SRV' if '+srv' in mongodb_url else 'Standard'}")
+print(f"📊 URL Length: {len(mongodb_url)} characters")
+
+try:
+    print("🔄 Creating MongoDB client (lazy connection)...")
+    # Create client with lazy connection - don't test immediately to avoid DNS issues during reload
+    client = MongoClient(
+        mongodb_url,
+        server_api=ServerApi('1'),
+        serverSelectionTimeoutMS=30000,  # 30 seconds for DNS resolution
+        connectTimeoutMS=20000,          # 20 seconds for connection
+        socketTimeoutMS=20000,           # 20 seconds for socket operations  
+        maxPoolSize=1,                   # Single connection for startup
+        retryWrites=True,
+        # Additional settings for DNS stability
+        maxIdleTimeMS=45000,
+        waitQueueTimeoutMS=10000,
+        # Lazy connection - don't connect immediately
+        connect=False,  # This prevents immediate DNS resolution
+    )
+    
+    print("✅ MongoClient created successfully (lazy connection)")
+    
+    # Set up database and collection references (no actual connection yet)
+    db = client.voiceforge_chat_history
+    chat_collection = db.chat_sessions
+    
+    # Only test connection if we're not in a reload scenario
+    import __main__
+    if hasattr(__main__, '__file__') and not hasattr(__main__, '_called_from_test'):
+        try:
+            print("🧪 Testing database connection...")
+            client.admin.command('ping')
+            print("✅ MongoDB ping successful!")
+            
+            # Test collection access
+            print("🧪 Testing collection access...")
+            collection_count = chat_collection.count_documents({})
+            print(f"✅ Collection accessible, current document count: {collection_count}")
+            
+            print("🎉 MongoDB setup completed successfully!")
+        except Exception as conn_test_error:
+            print(f"⚠️ Initial connection test failed (will retry on first use): {conn_test_error}")
+    else:
+        print("🔄 Skipping connection test during reload - will connect on first use")
+    
+except Exception as e:
+                print("❌ MongoDB Connection Failed!")
+    print(f"🔍 Error Type: {type(e).__name__}")
+    print(f"🔍 Error Message: {str(e)}")
+    
+    # Additional debug info for different error types
+    if "DNS" in str(e) or "resolution" in str(e):
+        print("\n🌐 DNS Resolution Debug:")
+        print("- This appears to be a DNS resolution issue")
+        print("- Check if you're using mongodb+srv:// format")
+        print("- Verify your internet connection")
+        print("- Try using a direct connection string instead of SRV")
+        
+    elif "timeout" in str(e).lower():
+        print("\n⏱️ Timeout Debug:")
+        print("- Connection is timing out")
+        print("- Check if MongoDB Atlas IP whitelist includes your current IP")
+        print("- Verify firewall settings")
+        
+    elif "authentication" in str(e).lower():
+        print("\n🔐 Authentication Debug:")
+        print("- Check username and password in connection string")
+        print("- Verify database user permissions")
+        
+    print(f"\n🔍 Full MongoDB URL for debugging: {mongodb_url}")
+    print("💡 Possible solutions:")
+    print("1. Check your internet connection")
+    print("2. Verify MongoDB Atlas cluster is running")
+    print("3. Check IP whitelist in MongoDB Atlas")
+    print("4. Try a different network connection")
+    print("5. Use a direct connection string instead of SRV")
+    
+    # Don't fallback - raise the error to stop startup
+    raise RuntimeError(f"MongoDB connection required but failed: {str(e)}") from e
 
 # Create FastAPI app instance
 app = FastAPI(title="VoiceForge - Text-to-Speech Platform", version="1.0.0")
@@ -32,6 +124,18 @@ class TTSRequest(BaseModel):
 # Pydantic model for LLM API
 class LLMRequest(BaseModel):
     text: str
+
+# Pydantic models for Chat History
+class ChatMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+    timestamp: datetime = None
+
+class ChatSession(BaseModel):
+    session_id: str
+    chats: List[ChatMessage] = []
+    created_at: datetime = None
+    updated_at: datetime = None
 
 # Mount static files directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -83,6 +187,84 @@ def trim_text_for_tts(text: str, max_chars: int = 3000) -> str:
     # Last resort: hard cut with ellipsis
     return text[:max_chars - 3].strip() + "..."
 
+def get_chat_history(session_id: str) -> List[ChatMessage]:
+    """
+    Retrieve chat history for a given session ID with connection retry
+    """
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Ensure connection is active
+            if attempt == 0:
+                client.admin.command('ping')  # Test connection
+            
+            session_doc = chat_collection.find_one({"session_id": session_id})
+            if session_doc:
+                return [ChatMessage(**chat) for chat in session_doc.get("chats", [])]
+            return []
+        except Exception as e:
+            print(f"Attempt {attempt + 1}/{max_retries} - Error retrieving chat history: {e}")
+            if attempt == max_retries - 1:
+                print(f"❌ Failed to retrieve chat history after {max_retries} attempts")
+                return []
+            # Wait before retry
+            import time
+            time.sleep(1)
+    return []
+
+def save_chat_message(session_id: str, role: str, content: str) -> bool:
+    """
+    Save a chat message to the database with connection retry
+    """
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Ensure connection is active
+            if attempt == 0:
+                client.admin.command('ping')  # Test connection
+                
+            message = {
+                "role": role,
+                "content": content,
+                "timestamp": datetime.utcnow()
+            }
+            
+            # Try to update existing session, or create new one
+            chat_collection.update_one(
+                {"session_id": session_id},
+                {
+                    "$push": {"chats": message},
+                    "$set": {"updated_at": datetime.utcnow()},
+                    "$setOnInsert": {"created_at": datetime.utcnow()}
+                },
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            print(f"Attempt {attempt + 1}/{max_retries} - Error saving chat message: {e}")
+            if attempt == max_retries - 1:
+                print(f"❌ Failed to save chat message after {max_retries} attempts")
+                return False
+            # Wait before retry
+            import time
+            time.sleep(1)
+    return False
+
+def format_chat_history_for_llm(chat_history: List[ChatMessage]) -> str:
+    """
+    Format chat history for LLM context
+    """
+    if not chat_history:
+        return ""
+    
+    formatted_history = "Previous conversation:\n"
+    for message in chat_history[-10:]:  # Keep last 10 messages for context
+        role = "Human" if message.role == "user" else "Assistant"
+        formatted_history += f"{role}: {message.content}\n"
+    
+    formatted_history += "\nCurrent message:\n"
+    return formatted_history
+
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     """Serve the main index page"""
@@ -90,8 +272,31 @@ async def read_root(request: Request):
 
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "message": "30 Days of Voice Agents - Day 2: TTS Ready!"}
+    """Health check endpoint with MongoDB status"""
+    health_status = {
+        "status": "healthy",
+        "message": "30 Days of Voice Agents - Day 10: Chat History Ready!",
+        "services": {}
+    }
+    
+    # Check MongoDB connection
+    try:
+        client.admin.command('ping')
+        collection_count = chat_collection.count_documents({})
+        health_status["services"]["mongodb"] = {
+            "status": "connected",
+            "database": "voiceforge_chat_history",
+            "collection": "chat_sessions",
+            "document_count": collection_count
+        }
+    except Exception as e:
+        health_status["status"] = "degraded"
+        health_status["services"]["mongodb"] = {
+            "status": "disconnected",
+            "error": str(e)
+        }
+    
+    return health_status
 
 @app.post("/api/tts")
 async def generate_speech(request: TTSRequest):
@@ -104,21 +309,52 @@ async def generate_speech(request: TTSRequest):
     Returns the audio file URL from Murf's API
     """
     try:
-        # Get API key from environment - not required if MURF_API_KEY is set
-        api_key = os.getenv("MURF_API_KEY")
-        
         # Validate input
-        if len(request.text.strip()) == 0:
-            raise HTTPException(status_code=400, detail="Text cannot be empty")
+        if not request.text or len(request.text.strip()) == 0:
+            return {
+                "success": False,
+                "error": "validation_error",
+                "message": "Text cannot be empty",
+                "fallback_audio": None
+            }
+        
+        if len(request.text) > 5000:
+            return {
+                "success": False,
+                "error": "validation_error",
+                "message": "Text is too long. Please limit to 5000 characters.",
+                "fallback_audio": None
+            }
+        
+        # Get API key from environment
+        api_key = os.getenv("MURF_API_KEY")
+        if not api_key:
+            print("❌ TTS Error: MURF_API_KEY not found in environment")
+            return {
+                "success": False,
+                "error": "configuration_error",
+                "message": "I'm having trouble with the voice service configuration right now.",
+                "fallback_audio": None
+            }
         
         # Initialize Murf client
-        client = Murf(api_key=api_key) if api_key else Murf()
+        murf_client = Murf(api_key=api_key)
         
         # Generate speech using Murf SDK
-        res = client.text_to_speech.generate(
+        res = murf_client.text_to_speech.generate(
             text=request.text,
             voice_id=request.voice_id,
         )
+        
+        # Validate response
+        if not res or not hasattr(res, 'audio_file') or not res.audio_file:
+            print("❌ TTS Error: Invalid response from Murf API")
+            return {
+                "success": False,
+                "error": "api_error",
+                "message": "I'm having trouble generating audio right now. Please try again.",
+                "fallback_audio": None
+            }
         
         # Return the audio file URL
         return {
@@ -128,8 +364,16 @@ async def generate_speech(request: TTSRequest):
         }
         
     except Exception as e:
-        # Handle any errors from the SDK
-        raise HTTPException(status_code=500, detail=f"Error generating speech: {str(e)}") from e
+        # Log the error
+        print(f"❌ TTS Error: {type(e).__name__}: {str(e)}")
+        
+        # Return user-friendly error response
+        return {
+            "success": False,
+            "error": "service_error",
+            "message": "I'm having trouble connecting to the voice service right now. Please try again in a moment.",
+            "fallback_audio": None
+        }
 
 @app.post("/transcribe/file")
 async def transcribe_file(audio_file: UploadFile = File(...)):
@@ -144,13 +388,42 @@ async def transcribe_file(audio_file: UploadFile = File(...)):
         # Validate file type
         allowed_types = ["audio/webm", "audio/wav", "audio/mp3", "audio/mpeg", "audio/ogg"]
         if audio_file.content_type not in allowed_types:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Unsupported file type: {audio_file.content_type}. Allowed types: {', '.join(allowed_types)}"
-            )
+            return {
+                "success": False,
+                "error": "validation_error",
+                "message": f"Unsupported file type. Please use WebM, WAV, MP3, or OGG format.",
+                "transcription": ""
+            }
+        
+        # Check file size (limit to 25MB)
+        if audio_file.size and audio_file.size > 25 * 1024 * 1024:
+            return {
+                "success": False,
+                "error": "validation_error",
+                "message": "Audio file is too large. Please use files under 25MB.",
+                "transcription": ""
+            }
+        
+        # Check if AssemblyAI API key is configured
+        if not aai.settings.api_key:
+            print("❌ STT Error: AssemblyAI API key not configured")
+            return {
+                "success": False,
+                "error": "configuration_error",
+                "message": "I'm having trouble with the speech recognition service configuration.",
+                "transcription": ""
+            }
         
         # Read the file content directly into memory
         audio_data = await audio_file.read()
+        
+        if not audio_data or len(audio_data) == 0:
+            return {
+                "success": False,
+                "error": "validation_error",
+                "message": "The audio file appears to be empty. Please try recording again.",
+                "transcription": ""
+            }
         
         # Configure transcription settings
         config = aai.TranscriptionConfig(
@@ -166,10 +439,22 @@ async def transcribe_file(audio_file: UploadFile = File(...)):
         
         # Check for transcription errors
         if transcript.status == "error":
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Transcription failed: {transcript.error}"
-            )
+            print(f"❌ STT Error: {transcript.error}")
+            return {
+                "success": False,
+                "error": "transcription_error",
+                "message": "I couldn't understand the audio. Please try speaking more clearly or check your microphone.",
+                "transcription": ""
+            }
+        
+        # Check if transcription is empty or very short
+        if not transcript.text or len(transcript.text.strip()) < 2:
+            return {
+                "success": False,
+                "error": "no_speech",
+                "message": "I didn't detect any speech in the audio. Please try speaking louder or closer to the microphone.",
+                "transcription": ""
+            }
         
         # Return successful response
         return {
@@ -181,183 +466,164 @@ async def transcribe_file(audio_file: UploadFile = File(...)):
             "message": "Audio transcribed successfully"
         }
         
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
     except Exception as e:
-        # Handle any other errors
-        raise HTTPException(status_code=500, detail=f"Error transcribing audio: {str(e)}") from e
-
-@app.post("/tts/echo")
-async def echo_with_tts(audio_file: UploadFile = File(...)):
-    """
-    Echo Bot v2: Transcribe audio and generate speech using Murf TTS
-    
-    - **audio_file**: The audio file to transcribe and echo back with Murf voice
-    
-    Returns the Murf-generated audio URL
-    """
-    try:
-        print("🎤 Starting Echo Bot v2 processing...")
+        # Log the error
+        print(f"❌ STT Error: {type(e).__name__}: {str(e)}")
         
-        # Step 1: Use existing transcription endpoint
-        print("🎤 Transcribing audio using existing /transcribe/file endpoint...")
+        # Return user-friendly error response
+        return {
+            "success": False,
+            "error": "service_error",
+            "message": "I'm having trouble connecting to the speech recognition service right now. Please try again.",
+            "transcription": ""
+        }
+
+
+
+
+
+@app.post("/agent/chat/{session_id}")
+async def agent_chat(session_id: str, audio_file: UploadFile = File(...)):
+    """
+    Chat with AI agent using voice input with persistent chat history
+    
+    - **session_id**: Unique session identifier for chat history
+    - **audio_file**: Audio file containing user's voice message
+    
+    Returns AI response with audio output and maintains chat history
+    """
+    fallback_message = "I'm having trouble connecting right now. Please try again in a moment."
+    
+    try:
+        print(f"🎤 Starting Agent Chat for session: {session_id}")
+        
+        # Step 1: Transcribe the audio
+        print("🎤 Transcribing audio with AssemblyAI...")
         transcription_result = await transcribe_file(audio_file)
         
         # Check if transcription was successful
-        if not transcription_result.get("success") or not transcription_result.get("transcription"):
-            raise HTTPException(
-                status_code=400,
-                detail="Transcription failed or no speech detected. Please try speaking more clearly."
-            )
+        if not transcription_result.get("success"):
+            error_message = transcription_result.get("message", "I couldn't understand the audio. Please try again.")
+            return {
+                "success": False,
+                "error": "transcription_error",
+                "message": error_message,
+                "fallback_audio": None
+            }
         
-        transcription_text = transcription_result["transcription"]
-        print(f"✅ Transcription successful: {transcription_text}")
+        user_message = transcription_result["transcription"]
+        print(f"✅ Transcription successful: {user_message}")
         
-        # Step 2: Use existing TTS endpoint to generate speech
-        print("🎵 Generating speech using existing /api/tts endpoint...")
+        # Step 2: Retrieve chat history (with fallback)
+        print(f"📚 Retrieving chat history for session: {session_id}")
+        try:
+            chat_history = get_chat_history(session_id)
+            print(f"📚 Found {len(chat_history)} previous messages")
+        except Exception as db_error:
+            print(f"⚠️ Database error retrieving chat history: {db_error}")
+            chat_history = []  # Continue without history
         
-        # Create TTS request object
-        tts_request = TTSRequest(
-            text=transcription_text,
-            voice_id="en-US-terrell"  # Default voice for echo
-        )
+        # Step 3: Format context for LLM
+        context = format_chat_history_for_llm(chat_history)
+        llm_input = context + user_message if context else user_message
         
-        # Use existing TTS function
-        tts_result = await generate_speech(tts_request)
+        print(f"🤖 Sending to LLM with context: {llm_input[:200]}...")
         
-        print(f"✅ Murf TTS successful: {tts_result['audio_file']}")
-        
-        # Return the response with both transcription and audio URL
-        return {
-            "success": True,
-            "transcription": transcription_text,
-            "audio_file": tts_result["audio_file"],
-            "confidence": transcription_result.get("confidence"),
-            "language": transcription_result.get("language"),
-            "message": "Audio transcribed and converted to speech successfully. The audio link will be available for 72 hours."
-        }
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        # Handle any other errors
-        print(f"❌ Echo TTS Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}") from e
-
-@app.post("/llm/query")
-async def llm_query(audio_file: UploadFile = File(None), request: LLMRequest = None):
-    """
-    Query the Gemini LLM API with text or audio input
-    
-    - **audio_file**: Optional audio file to transcribe and send to LLM
-    - **request**: Optional text input to send to the LLM (for backward compatibility)
-    
-    Returns the LLM response along with Murf-generated audio
-    """
-    try:
-        input_text = ""
-        
-        # Handle audio input
-        if audio_file:
-            print("🎤 Processing audio input for AI Voice Chatbot...")
-            
-            # Step 1: Transcribe the audio
-            print("🎤 Transcribing audio using existing transcribe_file function...")
-            transcription_result = await transcribe_file(audio_file)
-            
-            # Check if transcription was successful
-            if not transcription_result.get("success") or not transcription_result.get("transcription"):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Transcription failed or no speech detected. Please try speaking more clearly."
-                )
-            
-            input_text = transcription_result["transcription"]
-            print(f"✅ Transcription successful: {input_text}")
-            
-        # Handle text input (for backward compatibility)
-        elif request and request.text:
-            input_text = request.text.strip()
-            
-        # Validate we have input
-        if not input_text:
-            raise HTTPException(status_code=400, detail="No text or audio input provided")
-        
-        print(f"🤖 Sending to LLM: {input_text}")
-        
-        # Get API key from environment
+        # Step 4: Get AI response
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable not set")
+            print("❌ LLM Error: GEMINI_API_KEY not found in environment")
+            return {
+                "success": False,
+                "error": "configuration_error",
+                "message": "I'm having trouble with the AI service configuration right now.",
+                "fallback_audio": None
+            }
         
-        # Initialize Gemini client
-        client = genai.Client(api_key=api_key)
-        
-        # Generate response using Gemini API
-        response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",
-            contents=input_text
-        )
-        
-        # Extract response text
-        response_text = response.text if hasattr(response, 'text') else str(response)
-        print(f"🤖 LLM Response: {response_text}")
-        
-        # If audio input was provided, generate audio response using Murf
-        audio_file_url = None
-        if audio_file:
-            print("🎵 Generating speech response using Murf TTS...")
-            
-            # Trim response text for Murf TTS (3,000 character limit)
-            original_length = len(response_text)
-            trimmed_response = trim_text_for_tts(response_text)
-            
-            if len(trimmed_response) < original_length:
-                print(f"⚠️ AI response trimmed from {original_length} to {len(trimmed_response)} characters for TTS")
-            
-            # Create TTS request object with trimmed text
-            tts_request = TTSRequest(
-                text=trimmed_response,
-                voice_id="en-US-terrell"  # Default voice for AI responses
+        try:
+            gemini_client = genai.Client(api_key=api_key)
+            response = gemini_client.models.generate_content(
+                model="gemini-2.0-flash-exp",
+                contents=llm_input
             )
             
-            # Use existing TTS function (echo_with_tts logic)
-            tts_result = await generate_speech(tts_request)
+            ai_response = response.text if hasattr(response, 'text') else str(response)
+            
+            if not ai_response or len(ai_response.strip()) == 0:
+                ai_response = "I'm not sure how to respond to that. Could you please try rephrasing your question?"
+            
+            print(f"🤖 LLM Response: {ai_response}")
+            
+        except Exception as llm_error:
+            print(f"❌ LLM Error: {type(llm_error).__name__}: {str(llm_error)}")
+            ai_response = fallback_message
+        
+        # Step 5: Save user message to chat history (with error handling)
+        try:
+            save_chat_message(session_id, "user", user_message)
+            print(f"💾 Saved user message to session: {session_id}")
+        except Exception as save_error:
+            print(f"⚠️ Error saving user message: {save_error}")
+        
+        # Step 6: Save AI response to chat history (with error handling)
+        try:
+            save_chat_message(session_id, "assistant", ai_response)
+            print(f"💾 Saved AI response to session: {session_id}")
+        except Exception as save_error:
+            print(f"⚠️ Error saving AI response: {save_error}")
+        
+        # Step 7: Generate audio response
+        print("🎵 Generating speech response using Murf TTS...")
+        
+        # Trim response text for Murf TTS (3,000 character limit)
+        original_length = len(ai_response)
+        trimmed_response = trim_text_for_tts(ai_response)
+        
+        if len(trimmed_response) < original_length:
+            print(f"⚠️ AI response trimmed from {original_length} to {len(trimmed_response)} characters for TTS")
+        
+        # Create TTS request object with trimmed text
+        tts_request = TTSRequest(
+            text=trimmed_response,
+            voice_id="en-US-terrell"
+        )
+        
+        # Generate speech with error handling
+        tts_result = await generate_speech(tts_request)
+        
+        if tts_result.get("success"):
             audio_file_url = tts_result["audio_file"]
             print(f"✅ Murf TTS successful: {audio_file_url}")
-            
-            # Update response_text to reflect what was actually spoken
-            response_text = trimmed_response
+        else:
+            print(f"⚠️ TTS failed: {tts_result.get('message', 'Unknown error')}")
+            audio_file_url = None
         
-        # Return comprehensive response
-        response_data = {
+        # Step 8: Return comprehensive response
+        return {
             "success": True,
-            "response_text": response_text,
-            "input_text": input_text,
+            "session_id": session_id,
+            "user_message": user_message,
+            "ai_response": trimmed_response,
+            "audio_file": audio_file_url,
+            "chat_history_length": len(chat_history) + 2,  # +2 for current exchange
             "complete_response": {
                 "model": "gemini-2.0-flash-exp",
-                "text": response_text,
-                "raw_response": str(response)  # Full response for debugging
+                "text": ai_response,
+                "context_used": bool(context)
             },
-            "message": "LLM query processed successfully"
+            "message": "Agent chat processed successfully" + (" with history" if chat_history else "") + (". The audio link will be available for 72 hours." if audio_file_url else " (audio generation failed).")
         }
         
-        # Add audio file URL if audio was processed
-        if audio_file_url:
-            response_data["audio_file"] = audio_file_url
-            response_data["message"] = "Audio transcribed, processed by LLM, and converted to speech successfully. The audio link will be available for 72 hours."
-        
-        return response_data
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
     except Exception as e:
-        # Handle any errors from the SDK or processing
-        print(f"❌ LLM Query Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing LLM query: {str(e)}") from e
+        # Handle any unexpected errors
+        print(f"❌ Agent Chat Error: {type(e).__name__}: {str(e)}")
+        
+        return {
+            "success": False,
+            "error": "service_error",
+            "message": fallback_message,
+            "fallback_audio": None
+        }
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
