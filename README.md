@@ -1,8 +1,8 @@
-# 🎤 VoiceForge - Professional Text-to-Speech Platform
+# 🎤 VoiceForge - AI Voice Assistant Platform
 
-**Transform your text into natural-sounding speech with cutting-edge AI technology.**
+**Complete AI voice interaction platform with natural conversations, speech recognition, and intelligent responses.**
 
-VoiceForge is a modern, professional text-to-speech platform that converts your written content into high-quality audio using advanced AI voices. Perfect for creating voiceovers, audiobooks, podcasts, and accessibility solutions.
+VoiceForge is an advanced AI voice assistant platform that enables natural conversations through voice. It combines speech-to-text transcription, large language model intelligence, text-to-speech synthesis, persistent chat history, and real-time WebSocket communication. Perfect for creating conversational AI applications, voice interfaces, and intelligent chatbots.
 
 ![VoiceForge Platform](https://img.shields.io/badge/Platform-Text--to--Speech-blue?style=for-the-badge)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.104.1-009688?style=flat-square&logo=fastapi)
@@ -11,21 +11,40 @@ VoiceForge is a modern, professional text-to-speech platform that converts your 
 
 ## ✨ Features
 
-- **🎯 Professional Interface** - Modern, responsive web application
-- **⚡ Lightning Fast** - Generate high-quality audio in seconds
-- **🎭 Multiple Voices** - Choose from various natural-sounding AI voices
-- **🔊 Studio Quality** - Professional-grade audio output
-- **📱 Responsive Design** - Works seamlessly on desktop and mobile
-- **🔒 Secure API** - RESTful API with proper error handling
-- **🎨 Smooth Animations** - Engaging user experience with modern animations
-- **♿ Accessible** - Built with accessibility best practices
+### 🎙️ **Voice Interaction**
+- **🎤 Speech Recognition** - AssemblyAI-powered transcription with high accuracy
+- **🗣️ Natural Conversations** - Google Gemini LLM for intelligent responses
+- **🔊 Voice Synthesis** - Murf AI for professional-quality text-to-speech
+- **💬 Session-based Chat** - Persistent conversation history with MongoDB
+
+### 🌐 **Real-time Communication**
+- **⚡ WebSocket Support** - Real-time bidirectional communication (`/ws`)
+- **📡 JSON & Text Messaging** - Structured and plain text message handling
+- **🔄 Connection Management** - Multi-client support with connection tracking
+
+### 🤖 **AI & Intelligence**
+- **🧠 LLM Integration** - Google Gemini 2.0 Flash for contextual responses
+- **📚 Context Awareness** - Chat history integration for natural conversations
+- **🎯 Smart Fallbacks** - Graceful error handling with alternative responses
+- **⚙️ Auto Text Trimming** - Intelligent text processing for TTS limits
+
+### 🏗️ **Platform Features**
+- **📱 Responsive Design** - Modern, mobile-first interface
+- **🔒 Secure API** - Environment-based configuration and validation
+- **🎨 Professional UI** - Smooth animations and intuitive user experience
+- **♿ Accessibility** - Built with accessibility best practices
+- **📊 Health Monitoring** - System status and service health checks
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Python 3.11 or higher
 - Git
-- Murf AI API key (for text-to-speech generation)
+- **API Keys Required:**
+  - Murf AI API key (for text-to-speech generation)
+  - AssemblyAI API key (for speech recognition)
+  - Google Gemini API key (for LLM responses)
+  - MongoDB connection string (for chat history persistence)
 
 ### Installation
 
@@ -51,8 +70,11 @@ VoiceForge is a modern, professional text-to-speech platform that converts your 
    # Create environment file
    cp .env.example .env
    
-   # Edit .env and add your Murf API key:
-   MURF_API_KEY=your_actual_murf_api_key_here
+   # Edit .env and add your API keys:
+   MURF_API_KEY=your_murf_api_key_here
+   ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
+   GEMINI_API_KEY=your_gemini_api_key_here
+   MONGODB_URL=your_mongodb_connection_string_here
    ```
 
 5. **Run the application**
@@ -64,6 +86,7 @@ VoiceForge is a modern, professional text-to-speech platform that converts your 
    - **Main Platform**: http://localhost:8000
    - **API Documentation**: http://localhost:8000/docs
    - **Health Check**: http://localhost:8000/api/health
+   - **WebSocket Endpoint**: ws://localhost:8000/ws
 
 ## 🏗️ Architecture
 
@@ -71,51 +94,112 @@ VoiceForge is built with modern web technologies:
 
 ```
 voiceforge/
-├── main.py                 # FastAPI backend server
+├── main.py                 # FastAPI backend server with AI voice assistant
 ├── requirements.txt        # Python dependencies
-├── .env                   # Environment variables (create from .env.example)
+├── .env                   # Environment variables (API keys & configuration)
 ├── templates/
-│   └── index.html         # Professional SPA frontend
+│   └── index.html         # AI Voice Assistant web interface
 ├── static/
-│   ├── script.js          # Modern JavaScript with animations
-│   └── style.css          # Professional CSS with responsive design
+│   ├── script.js          # Voice chat functionality with WebRTC
+│   └── style.css          # Modern responsive design
+├── uploads/               # Temporary audio file storage
 └── README.md              # This documentation
 ```
 
 ### Technology Stack
 
-- **Backend**: FastAPI + Python 3.11+
-- **Frontend**: Modern HTML5, CSS3, JavaScript ES6+
-- **AI/TTS**: Murf AI API integration
-- **Styling**: Custom CSS with CSS Grid, Flexbox, and animations
+- **Backend**: FastAPI + Python 3.11+ with async/await
+- **Frontend**: Modern HTML5, CSS3, JavaScript ES6+ with WebRTC
+- **AI Services**: 
+  - Google Gemini 2.0 Flash (LLM)
+  - Murf AI (Text-to-Speech)
+  - AssemblyAI (Speech-to-Text)
+- **Database**: MongoDB Atlas (Chat History)
+- **Real-time**: WebSocket communication
+- **Styling**: Custom CSS with animations and responsive design
 - **Fonts**: Google Fonts (Inter)
-- **Deployment**: Production-ready ASGI server
+- **Deployment**: Production-ready ASGI server with Uvicorn
 
 ## 🔧 API Reference
 
 ### Core Endpoints
 
 #### `GET /`
-Serves the main VoiceForge web application
+Serves the main VoiceForge AI Voice Assistant web application
 
 #### `GET /api/health`
-System health check endpoint
+System health check endpoint with service status
 
 **Response:**
 ```json
 {
   "status": "healthy",
-  "message": "30 Days of Voice Agents - Day 2: TTS Ready!"
+  "message": "30 Days of Voice Agents - Day 10: Chat History Ready!",
+  "services": {
+    "mongodb": {
+      "status": "connected",
+      "database": "voiceforge_chat_history",
+      "collection": "chat_sessions",
+      "document_count": 42
+    }
+  }
+}
+```
+
+### Voice Assistant Endpoints
+
+#### `POST /agent/chat/{session_id}`
+Complete voice interaction with AI assistant
+
+**Parameters:**
+- `session_id`: Unique session identifier for chat history persistence
+
+**Request:** (Form Data)
+- `audio_file`: Audio file (WebM, WAV, MP3, OGG) - max 25MB
+
+**Response:**
+```json
+{
+  "success": true,
+  "session_id": "sess_1642123456_abc123",
+  "user_message": "What's the weather like today?",
+  "ai_response": "I'd be happy to help, but I don't have access to current weather data...",
+  "audio_file": "https://murf-audio-url.mp3",
+  "chat_history_length": 4,
+  "complete_response": {
+    "model": "gemini-2.0-flash-exp",
+    "text": "Full AI response text",
+    "context_used": true
+  },
+  "message": "Agent chat processed successfully with history. The audio link will be available for 72 hours."
+}
+```
+
+#### `POST /transcribe/file`
+Speech-to-text transcription service
+
+**Request:** (Form Data)
+- `audio_file`: Audio file to transcribe
+
+**Response:**
+```json
+{
+  "success": true,
+  "transcription": "Hello, how are you today?",
+  "confidence": 0.95,
+  "language": "en",
+  "processing_time": 2.3,
+  "message": "Audio transcribed successfully"
 }
 ```
 
 #### `POST /api/tts`
-Convert text to speech using AI voices
+Text-to-speech generation service
 
 **Request:**
 ```json
 {
-  "text": "Welcome to VoiceForge, where your words come to life!",
+  "text": "Welcome to VoiceForge AI Assistant!",
   "voice_id": "en-US-terrell"
 }
 ```
@@ -124,49 +208,85 @@ Convert text to speech using AI voices
 ```json
 {
   "success": true,
-  "audio_file": "https://generated-audio-url.mp3",
+  "audio_file": "https://murf-audio-url.mp3",
   "message": "Audio file generated successfully. The link will be available for 72 hours."
 }
 ```
 
-**Available Voices:**
-- `en-US-terrell` - Professional Male Voice
-- `en-US-sarah` - Warm Female Voice (if configured)
-- `en-US-mike` - Friendly Male Voice (if configured)
+### Real-time Communication
 
-### Error Handling
+#### `WebSocket /ws`
+Real-time bidirectional communication
 
-The API provides comprehensive error handling:
+**Connection:** `ws://localhost:8000/ws`
 
+**Text Message:**
+```
+Send: "Hello WebSocket!"
+Receive: "Echo: Hello WebSocket!"
+```
+
+**JSON Message:**
 ```json
-{
-  "detail": "Error description here"
+Send: {"type": "greeting", "content": "Hello AI!"}
+Receive: {
+  "type": "echo",
+  "original_type": "greeting",
+  "content": "Echo: Hello AI!",
+  "timestamp": "2025-01-06T12:00:00Z",
+  "connection_count": 1
 }
 ```
 
-Common error codes:
-- `400` - Bad Request (empty text, invalid parameters)
-- `500` - Internal Server Error (API issues, network problems)
+### Error Handling
+
+The API provides comprehensive error handling with user-friendly messages:
+
+**Standard Error Response:**
+```json
+{
+  "success": false,
+  "error": "error_type",
+  "message": "User-friendly error description",
+  "fallback_audio": null
+}
+```
+
+**Common Error Types:**
+- `validation_error` - Invalid input (empty text, file too large, unsupported format)
+- `configuration_error` - Missing API keys or service configuration
+- `transcription_error` - Speech recognition failed
+- `no_speech` - No speech detected in audio
+- `service_error` - External service unavailable
+- `api_error` - API response validation failed
+
+**WebSocket Errors:**
+- Connection drops are handled gracefully with automatic cleanup
+- Invalid JSON messages fallback to text processing
+- Connection state tracking prevents message loss
 
 ## 🎨 Frontend Features
 
-### Modern User Interface
-- **Responsive Design**: Works on all screen sizes
-- **Smooth Animations**: Professional hover effects and transitions
-- **Interactive Elements**: Real-time feedback and loading states
+### AI Voice Assistant Interface
+- **Voice Chat UI**: Intuitive conversation interface with chat bubbles
+- **Real-time Status**: Live recording indicator and processing progress
+- **Session Management**: Persistent chat sessions with unique identifiers
+- **Audio Controls**: Professional microphone button with visual feedback
+
+### Voice Interaction Features
+- **WebRTC Recording**: High-quality audio capture with noise suppression
+- **Progress Tracking**: Step-by-step visual feedback during processing
+- **Auto-play Responses**: AI voice responses play automatically
+- **Recording Timer**: Visual recording duration display
+- **Smart Fallbacks**: Browser TTS when server TTS fails
+
+### User Experience Enhancements
+- **Responsive Design**: Optimized for desktop and mobile devices
+- **Smooth Animations**: Professional micro-interactions and transitions
+- **Visual Feedback**: Recording indicators, pulse animations, and status updates
+- **Error Handling**: User-friendly error messages with retry options
 - **Accessibility**: Keyboard navigation and screen reader support
-
-### Animation System
-- **Sound Wave Visualization**: Animated sound bars in hero section
-- **Scroll Animations**: Elements animate in as you scroll
-- **Hover Effects**: Interactive buttons and cards
-- **Smooth Scrolling**: Navigation with smooth scroll behavior
-
-### User Experience
-- **Professional Branding**: Modern VoiceForge identity
-- **Intuitive Interface**: Clean, focused design
-- **Real-time Feedback**: Status messages and loading indicators
-- **Auto-play Audio**: Generated audio plays automatically (when permitted)
+- **Auto-scroll**: Messages automatically scroll into view
 
 ## 🔐 Security & Configuration
 
@@ -175,41 +295,64 @@ Common error codes:
 Create a `.env` file with the following configuration:
 
 ```env
-# Murf AI Configuration
+# Required API Keys
 MURF_API_KEY=your_murf_api_key_here
-MURF_API_BASE_URL=https://api.murf.ai/v1
+ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
+GEMINI_API_KEY=your_google_gemini_api_key_here
 
-# Application Configuration (optional)
+# Database Configuration
+MONGODB_URL=mongodb+srv://username:password@cluster.mongodb.net/voiceforge_chat_history
+
+# Optional Configuration
 DEBUG=false
 HOST=0.0.0.0
 PORT=8000
+USE_MOCK_LLM=false
 ```
 
 ### Security Best Practices
-- ✅ Environment variables for sensitive data
-- ✅ API key validation and error handling
+- ✅ Environment variables for sensitive data (API keys, DB credentials)
+- ✅ API key validation and graceful error handling
 - ✅ Request validation with Pydantic models
-- ✅ CORS configuration for production
-- ✅ Input sanitization and length limits
+- ✅ File upload validation (type, size limits)
+- ✅ Input sanitization and text length limits
+- ✅ MongoDB connection with authentication
+- ✅ WebSocket connection management and cleanup
+- ✅ Timeout configurations to prevent hanging requests
 
 ## 🧪 Testing
 
-### Manual Testing
-1. **Web Interface**: Open http://localhost:8000
-2. **Enter Text**: Type or paste text in the textarea
-3. **Select Voice**: Choose from available voice options
-4. **Generate Audio**: Click "Generate Speech" button
-5. **Listen**: Audio will play automatically or click play button
+### Voice Assistant Testing
+1. **Voice Chat Interface**: Open http://localhost:8000
+2. **Start Conversation**: Click the microphone button
+3. **Speak**: Record your voice message (browser will request microphone permission)
+4. **AI Response**: Watch the processing steps and listen to the AI response
+5. **Continue Chat**: Continue the conversation with context awareness
+6. **Clear Chat**: Start a new session with the clear button
+
+### WebSocket Testing
+Use Postman or a WebSocket client:
+1. **Connect**: ws://localhost:8000/ws
+2. **Send Text**: `Hello WebSocket!`
+3. **Send JSON**: `{"type": "test", "content": "Hello AI!"}`
+4. **Observe**: Structured responses with timestamps and connection count
 
 ### API Testing
 Use the interactive API documentation at http://localhost:8000/docs to:
-- Test all endpoints
+- Test voice assistant endpoints (`/agent/chat/{session_id}`)
+- Test transcription service (`/transcribe/file`)
+- Test text-to-speech (`/api/tts`)
 - View request/response schemas
-- Try different voice options and text inputs
+- Upload audio files and test voice interactions
 
-### Health Check
+### Service Health Checks
 ```bash
+# Overall system health
 curl http://localhost:8000/api/health
+
+# Test individual services
+curl -X POST -F "audio_file=@test.wav" http://localhost:8000/transcribe/file
+curl -X POST -H "Content-Type: application/json" -d '{"text":"Test"}' http://localhost:8000/api/tts
 ```
 
 ## 🚀 Deployment
@@ -262,21 +405,68 @@ We welcome contributions to VoiceForge! Here's how you can help:
 
 ## 📊 Performance
 
-VoiceForge is optimized for performance:
-- **Fast API responses** with efficient request handling
-- **Optimized frontend** with modern CSS and JavaScript
-- **Minimal dependencies** for quick startup
-- **Responsive design** that works on all devices
-- **Progressive enhancement** for better accessibility
+VoiceForge is optimized for high-performance voice interactions:
+- **Async Processing**: FastAPI with async/await for concurrent request handling
+- **Persistent Connections**: HTTP session reuse for faster API calls
+- **WebSocket Efficiency**: Real-time communication with minimal overhead
+- **Database Optimization**: MongoDB with connection pooling and retry logic
+- **Smart Caching**: Audio file caching and intelligent text trimming
+- **Error Recovery**: Graceful fallbacks and retry mechanisms
+- **Resource Management**: Automatic cleanup of WebSocket connections and file uploads
 
 ## 🛠️ Troubleshooting
 
 ### Common Issues
 
-**API Key Issues:**
+**API Key Configuration:**
 ```bash
-# Check if environment variables are loaded
-python -c "import os; print(os.getenv('MURF_API_KEY'))"
+# Check if all required environment variables are loaded
+python -c "
+import os
+keys = ['MURF_API_KEY', 'ASSEMBLYAI_API_KEY', 'GEMINI_API_KEY', 'MONGODB_URL']
+for key in keys:
+    value = os.getenv(key)
+    print(f'{key}: {\"✅ Set\" if value else \"❌ Missing\"}')
+"
+```
+
+**MongoDB Connection Issues:**
+```bash
+# Test MongoDB connection
+python -c "
+from pymongo import MongoClient
+import os
+try:
+    client = MongoClient(os.getenv('MONGODB_URL'))
+    client.admin.command('ping')
+    print('✅ MongoDB connection successful')
+except Exception as e:
+    print(f'❌ MongoDB connection failed: {e}')
+"
+```
+
+**Microphone Permission Issues:**
+- Browser blocks microphone access → Check site permissions
+- HTTPS required for microphone in production → Use SSL certificates
+- Multiple tabs accessing microphone → Close other audio applications
+
+**WebSocket Connection Issues:**
+```bash
+# Test WebSocket connection
+pip install websockets
+python -c "
+import asyncio
+import websockets
+async def test():
+    try:
+        async with websockets.connect('ws://localhost:8000/ws') as ws:
+            await ws.send('test')
+            response = await ws.recv()
+            print(f'✅ WebSocket test: {response}')
+    except Exception as e:
+        print(f'❌ WebSocket failed: {e}')
+asyncio.run(test())
+"
 ```
 
 **Port Already in Use:**
@@ -285,19 +475,22 @@ python -c "import os; print(os.getenv('MURF_API_KEY'))"
 lsof -ti:8000 | xargs kill -9
 ```
 
-**Module Not Found:**
+**Module Installation Issues:**
 ```bash
 # Ensure virtual environment is activated
 source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
 ### Getting Help
 
 - **Check API Documentation**: http://localhost:8000/docs
-- **Review Logs**: Check console output for error messages
-- **Verify Configuration**: Ensure `.env` file is properly configured
-- **Test API Endpoints**: Use the interactive API docs for testing
+- **Review Logs**: Check console output for detailed error messages
+- **System Health**: Monitor http://localhost:8000/api/health for service status
+- **Test Individual Services**: Use API docs to test transcription, TTS, and voice chat
+- **WebSocket Testing**: Use Postman or browser developer tools for WebSocket debugging
+- **Database Status**: Check MongoDB Atlas dashboard for connection issues
 
 ## 📝 License
 
@@ -305,17 +498,23 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-- **Murf AI** for providing the advanced text-to-speech API
-- **FastAPI** for the excellent Python web framework
+- **Google Gemini** for providing advanced large language model capabilities
+- **Murf AI** for high-quality text-to-speech synthesis
+- **AssemblyAI** for accurate speech recognition technology
+- **MongoDB Atlas** for reliable cloud database services
+- **FastAPI** for the excellent async Python web framework
+- **WebRTC** community for enabling browser-based audio recording
 - **Inter Font** by Google Fonts for beautiful typography
 - **Open Source Community** for amazing tools and libraries
 
 ## 📞 Support
 
 - **Documentation**: [API Docs](http://localhost:8000/docs)
+- **System Health**: [Health Check](http://localhost:8000/api/health)
+- **WebSocket Testing**: ws://localhost:8000/ws
 - **Issues**: [GitHub Issues](https://github.com/your-username/voiceforge/issues)
 - **Contact**: [Your Contact Information]
 
 ---
 
-**VoiceForge** - *Transform your words into beautiful, natural-sounding speech* 🎤✨
+**VoiceForge AI Assistant** - *Natural voice conversations with AI intelligence* 🤖🎤✨

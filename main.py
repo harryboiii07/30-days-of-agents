@@ -300,23 +300,38 @@ async def health_check():
 
 # WebSocket Connection Manager
 class ConnectionManager:
+    """
+    WebSocket connection manager for handling multiple concurrent connections.
+    
+    Provides functionality for connecting, disconnecting, and messaging WebSocket clients.
+    Automatically handles broken connections and maintains connection state.
+    """
+    
     def __init__(self):
         self.active_connections: List[WebSocket] = []
 
     async def connect(self, websocket: WebSocket):
+        """Accept a new WebSocket connection and add it to the active connections list."""
         await websocket.accept()
         self.active_connections.append(websocket)
         print(f"🔌 WebSocket connected. Total connections: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
+        """Remove a WebSocket connection from the active connections list."""
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
         print(f"🔌 WebSocket disconnected. Total connections: {len(self.active_connections)}")
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
+        """Send a message to a specific WebSocket connection."""
         await websocket.send_text(message)
 
     async def broadcast(self, message: str):
+        """
+        Send a message to all active WebSocket connections.
+        
+        Automatically removes broken connections during broadcast.
+        """
         for connection in self.active_connections:
             try:
                 await connection.send_text(message)
@@ -330,14 +345,35 @@ manager = ConnectionManager()
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """
-    WebSocket endpoint for real-time communication
+    WebSocket endpoint for real-time bidirectional communication.
     
-    Establishes a WebSocket connection and echoes back any messages sent by the client.
-    This endpoint can be tested using tools like Postman, wscat, or a WebSocket client.
+    Supports both plain text and structured JSON messages with intelligent response formatting.
     
-    Example usage:
-    - Connect to: ws://localhost:8000/ws
-    - Send any text message and it will be echoed back
+    **Connection:** ws://localhost:8000/ws
+    
+    **Supported Message Types:**
+    - Plain text: Receives "Hello" → Returns "Echo: Hello"
+    - JSON messages: Receives {"type": "test", "content": "Hello"} → Returns structured response
+    
+    **JSON Response Format:**
+    ```json
+    {
+        "type": "echo",
+        "original_type": "test",
+        "content": "Echo: Hello",
+        "timestamp": "2025-01-06T12:00:00Z",
+        "connection_count": 1
+    }
+    ```
+    
+    **Features:**
+    - Multi-client support with connection tracking
+    - Automatic JSON parsing and fallback to text
+    - Graceful connection handling and cleanup
+    - Real-time connection count in responses
+    
+    **Testing:**
+    Use Postman WebSocket client, browser developer tools, or any WebSocket testing tool.
     """
     await manager.connect(websocket)
     
@@ -388,7 +424,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         print(f"❌ WebSocket error: {e}")
         manager.disconnect(websocket)
-        
+
 @app.post("/api/tts")
 async def generate_speech(request: TTSRequest):
     """
