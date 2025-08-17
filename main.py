@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -298,6 +298,97 @@ async def health_check():
     
     return health_status
 
+# WebSocket Connection Manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        print(f"🔌 WebSocket connected. Total connections: {len(self.active_connections)}")
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+        print(f"🔌 WebSocket disconnected. Total connections: {len(self.active_connections)}")
+
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            try:
+                await connection.send_text(message)
+            except:
+                # Remove broken connections
+                self.active_connections.remove(connection)
+
+# Initialize connection manager
+manager = ConnectionManager()
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time communication
+    
+    Establishes a WebSocket connection and echoes back any messages sent by the client.
+    This endpoint can be tested using tools like Postman, wscat, or a WebSocket client.
+    
+    Example usage:
+    - Connect to: ws://localhost:8000/ws
+    - Send any text message and it will be echoed back
+    """
+    await manager.connect(websocket)
+    
+    try:
+        while True:
+            # Wait for message from client
+            data = await websocket.receive_text()
+            
+            # Log the received message
+            print(f"📨 Received WebSocket message: {data}")
+            
+            # Try to parse as JSON for structured messages
+            try:
+                import json
+                parsed_data = json.loads(data)
+                
+                # Handle structured message
+                if isinstance(parsed_data, dict):
+                    message_type = parsed_data.get("type", "unknown")
+                    content = parsed_data.get("content", data)
+                    
+                    # Create structured response
+                    response = {
+                        "type": "echo",
+                        "original_type": message_type,
+                        "content": f"Echo: {content}",
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "connection_count": len(manager.active_connections)
+                    }
+                    
+                    await websocket.send_text(json.dumps(response))
+                    print(f"📤 Sent WebSocket JSON echo: {response}")
+                else:
+                    # Handle simple JSON values
+                    echo_message = f"Echo: {data}"
+                    await manager.send_personal_message(echo_message, websocket)
+                    print(f"📤 Sent WebSocket simple echo: {echo_message}")
+                    
+            except json.JSONDecodeError:
+                # Handle plain text message
+                echo_message = f"Echo: {data}"
+                await manager.send_personal_message(echo_message, websocket)
+                print(f"📤 Sent WebSocket text echo: {echo_message}")
+            
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        print("🔌 WebSocket client disconnected")
+    except Exception as e:
+        print(f"❌ WebSocket error: {e}")
+        manager.disconnect(websocket)
+        
 @app.post("/api/tts")
 async def generate_speech(request: TTSRequest):
     """
