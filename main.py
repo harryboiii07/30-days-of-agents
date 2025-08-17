@@ -75,7 +75,7 @@ try:
         print("🔄 Skipping connection test during reload - will connect on first use")
     
 except Exception as e:
-                print("❌ MongoDB Connection Failed!")
+    print("❌ MongoDB Connection Failed!")
     print(f"🔍 Error Type: {type(e).__name__}")
     print(f"🔍 Error Message: {str(e)}")
     
