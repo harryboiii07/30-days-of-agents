@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, UploadFile, File, WebSocket, WebSocketDisconnect
+import json
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -9,11 +10,26 @@ from pathlib import Path
 from dotenv import load_dotenv
 from murf import Murf
 import assemblyai as aai
+from assemblyai.streaming.v3 import (
+    BeginEvent,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingError,
+    StreamingEvents,
+    StreamingParameters,
+    StreamingSessionParameters,
+    TerminationEvent,
+    TurnEvent,
+)
 from google import genai
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 from typing import List
 from datetime import datetime
+import asyncio
+import subprocess
+import threading
+import queue
 
 # Load environment variables
 load_dotenv()
@@ -424,6 +440,276 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         print(f"❌ WebSocket error: {e}")
         manager.disconnect(websocket)
+
+@app.websocket("/ws/audio_stream/{session_id}")
+async def audio_stream_websocket(websocket: WebSocket, session_id: str):
+    """
+    WebSocket endpoint for real-time audio streaming.
+    
+    Receives binary audio chunks from the client and saves them to a file.
+    
+    **Connection:** ws://localhost:8000/ws/audio_stream/{session_id}
+    
+    **Features:**
+    - Receives binary audio data chunks in real-time
+    - Saves received audio to a file in the uploads directory
+    - Handles both binary data and JSON control messages
+    - Automatic file cleanup and connection management
+    """
+    await websocket.accept()
+    print(f"🎤 Audio WebSocket connected for session: {session_id}")
+
+    # Create file path for this session's raw audio (WebM) for debugging/auditing
+    audio_filename = f"audio_stream_{session_id}_{int(datetime.utcnow().timestamp())}.webm"
+    audio_filepath = UPLOAD_DIR / audio_filename
+
+    audio_file = None
+    total_chunks = 0
+    total_bytes = 0
+
+    # Prepare AssemblyAI streaming client
+    loop = asyncio.get_event_loop()
+
+    def on_begin(self: type[StreamingClient], event: BeginEvent):
+        print(f"🟢 AAI session started: {event.id}")
+
+    def on_turn(self: type[StreamingClient], event: TurnEvent):
+        transcript_text = (event.transcript or "").strip()
+        # Only mark final if we actually have recognized speech
+        is_final = bool(event.end_of_turn and transcript_text)
+        print(f"📝 Transcript ({'final' if is_final else 'partial'}): {transcript_text}")
+        try:
+            asyncio.run_coroutine_threadsafe(
+                websocket.send_text(json.dumps({
+                    "type": "transcript",
+                    "text": transcript_text,
+                    "final": is_final,
+                })),
+                loop,
+            )
+        except Exception as send_err:
+            print(f"⚠️ Failed to send transcript to client: {send_err}")
+
+        if event.end_of_turn and not event.turn_is_formatted:
+            params = StreamingSessionParameters(format_turns=True)
+            self.set_params(params)
+
+    def on_terminated(self: type[StreamingClient], event: TerminationEvent):
+        print(f"🔴 AAI session terminated: {event.audio_duration_seconds} seconds processed")
+
+    def on_error(self: type[StreamingClient], error: StreamingError):
+        print(f"❌ AAI streaming error: {error}")
+
+    aai_client = None
+    aai_stream_thread = None
+
+    # Queued PCM pipeline fed by ffmpeg
+    pcm_queue: "queue.Queue[bytes | None]" = queue.Queue(maxsize=50)
+    stop_event = threading.Event()
+
+    # Start ffmpeg to convert WebM/Opus -> PCM s16le mono 16k
+    ffmpeg_proc = None
+    try:
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-fflags",
+            "+nobuffer",
+            "-flags",
+            "low_delay",
+            "-f",
+            "webm",
+            "-i",
+            "pipe:0",
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-f",
+            "s16le",
+            "-acodec",
+            "pcm_s16le",
+            "pipe:1",
+        ]
+
+        ffmpeg_proc = subprocess.Popen(
+            ffmpeg_cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except FileNotFoundError:
+        print("❌ ffmpeg not found. Please install ffmpeg and ensure it is in PATH.")
+        await websocket.close()
+        return
+    except Exception as e:
+        print(f"❌ Failed to start ffmpeg: {e}")
+        await websocket.close()
+        return
+
+    # Thread reading PCM from ffmpeg stdout and pushing to queue
+    def read_pcm_from_ffmpeg():
+        try:
+            # ~100ms per chunk at 16kHz mono s16le = 16000 samples * 2 bytes * 0.1 = 3200 bytes
+            chunk_size = 3200
+            stdout = ffmpeg_proc.stdout
+            while not stop_event.is_set():
+                if stdout is None:
+                    break
+                data = stdout.read(chunk_size)
+                if not data:
+                    break
+                pcm_queue.put(data)
+        except Exception as e:
+            print(f"⚠️ PCM reader thread error: {e}")
+        finally:
+            try:
+                pcm_queue.put(None)
+            except Exception:
+                pass
+
+    pcm_reader_thread = threading.Thread(target=read_pcm_from_ffmpeg, daemon=True)
+    pcm_reader_thread.start()
+
+    # Generator yielding PCM to AAI SDK
+    def pcm_generator():
+        while True:
+            item = pcm_queue.get()
+            if item is None:
+                break
+            # AAI expects bytes between ~50ms and 1000ms per chunk
+            yield item
+
+    # Start AssemblyAI streaming in a background thread
+    def start_aai_streaming():
+        nonlocal aai_client
+        try:
+            aai_client = StreamingClient(
+                StreamingClientOptions(
+                    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+                    api_host="streaming.assemblyai.com",
+                )
+            )
+            aai_client.on(StreamingEvents.Begin, on_begin)
+            aai_client.on(StreamingEvents.Turn, on_turn)
+            aai_client.on(StreamingEvents.Termination, on_terminated)
+            aai_client.on(StreamingEvents.Error, on_error)
+
+            aai_client.connect(
+                StreamingParameters(
+                    sample_rate=16000,
+                    format_turns=True,
+                )
+            )
+
+            aai_client.stream(pcm_generator())
+        except Exception as e:
+            print(f"❌ AAI streaming client error: {e}")
+        finally:
+            try:
+                if aai_client:
+                    aai_client.disconnect(terminate=True)
+            except Exception:
+                pass
+
+    aai_stream_thread = threading.Thread(target=start_aai_streaming, daemon=True)
+    aai_stream_thread.start()
+
+    try:
+        # Open file for binary writing (raw WebM for debugging)
+        audio_file = open(audio_filepath, 'wb')
+        print(f"📁 Created audio file: {audio_filepath}")
+
+        while True:
+            try:
+                # Receive data from client
+                message = await websocket.receive()
+
+                if 'bytes' in message:
+                    # Handle binary audio data
+                    audio_chunk = message['bytes']
+                    if audio_chunk:
+                        # Save original chunk
+                        audio_file.write(audio_chunk)
+                        total_chunks += 1
+                        total_bytes += len(audio_chunk)
+                        # Feed ffmpeg for real-time decode/resample
+                        try:
+                            if ffmpeg_proc.stdin:
+                                ffmpeg_proc.stdin.write(audio_chunk)
+                                ffmpeg_proc.stdin.flush()
+                        except Exception as pipe_err:
+                            print(f"⚠️ ffmpeg stdin write error: {pipe_err}")
+                        print(f"📼 Received audio chunk {total_chunks}: {len(audio_chunk)} bytes (total: {total_bytes} bytes)")
+
+                elif 'text' in message:
+                    # Handle text/JSON control messages
+                    try:
+                        control_msg = json.loads(message['text'])
+                        if control_msg.get('type') == 'end_recording':
+                            print(f"🛑 End of recording signal received for session: {session_id}")
+                            break
+                    except json.JSONDecodeError:
+                        print(f"📝 Received text message: {message['text']}")
+
+            except Exception as chunk_error:
+                print(f"❌ Error processing audio chunk: {chunk_error}")
+                continue
+
+    except WebSocketDisconnect:
+        print(f"🔌 Audio WebSocket client disconnected for session: {session_id}")
+    except Exception as e:
+        print(f"❌ Audio WebSocket error for session {session_id}: {e}")
+    finally:
+        # Signal end of input to ffmpeg
+        try:
+            if ffmpeg_proc and ffmpeg_proc.stdin:
+                ffmpeg_proc.stdin.close()
+        except Exception:
+            pass
+
+        # Wait for ffmpeg to finish flushing
+        try:
+            if ffmpeg_proc:
+                ffmpeg_proc.wait(timeout=5)
+        except Exception:
+            pass
+
+        # Stop PCM reader and streaming
+        stop_event.set()
+        try:
+            pcm_queue.put(None)
+        except Exception:
+            pass
+        try:
+            if aai_stream_thread and aai_stream_thread.is_alive():
+                aai_stream_thread.join(timeout=5)
+        except Exception:
+            pass
+
+        # Clean up file resources
+        if audio_file:
+            audio_file.close()
+            print(f"💾 Audio file saved: {audio_filepath}")
+            print(f"📊 Final stats - Chunks: {total_chunks}, Total bytes: {total_bytes}")
+
+            # Send confirmation back to client if connection is still open
+            try:
+                await websocket.send_text(json.dumps({
+                    "type": "recording_complete",
+                    "filename": audio_filename,
+                    "chunks_received": total_chunks,
+                    "total_bytes": total_bytes
+                }))
+            except Exception:
+                pass  # Client may have already disconnected
+
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 @app.post("/api/tts")
 async def generate_speech(request: TTSRequest):

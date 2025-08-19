@@ -117,6 +117,125 @@ let recordingTimer = null;
 let recordingStartTime = 0;
 let currentAudio = null;
 
+// WebSocket Audio Streaming Variables
+let audioWebSocket = null;
+let isStreamingAudio = false;
+let currentStreamingTranscript = '';
+let currentStreamingFinal = false;
+let streamingBubbleEl = null; // ephemeral message bubble during recording
+
+// Buffer system for consecutive final transcripts
+let lastServerResponse = null;
+let transcriptBuffer = [];
+let isBufferingMode = false;
+
+// WebSocket Audio Streaming Functions
+function setupAudioWebSocket() {
+    try {
+        // Close existing connection if any
+        if (audioWebSocket) {
+            audioWebSocket.close();
+        }
+        
+        // Create new WebSocket connection for audio streaming
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/audio_stream/${currentSessionId}`;
+        
+        audioWebSocket = new WebSocket(wsUrl);
+        
+        audioWebSocket.onopen = function(event) {
+            console.log('🔌 Audio WebSocket connected successfully');
+            isStreamingAudio = true;
+        };
+        
+        audioWebSocket.onmessage = function(event) {
+            try {
+                const response = JSON.parse(event.data);
+                if (response.type === 'transcript') {
+                    const text = response.text || '';
+                    const isFinal = !!response.final;
+                    currentStreamingTranscript = text;
+                    currentStreamingFinal = isFinal;
+                    
+                    // Handle consecutive final transcript buffering
+                    if (isFinal && lastServerResponse && lastServerResponse.final) {
+                        // Two consecutive final responses - replace the last one with current
+                        if (!isBufferingMode) {
+                            isBufferingMode = true;
+                            transcriptBuffer = [];
+                        }
+                        // Replace the last item with the current (more complete) transcript
+                        if (transcriptBuffer.length > 0) {
+                            transcriptBuffer[transcriptBuffer.length - 1] = text;
+                        } else {
+                            transcriptBuffer.push(text);
+                        }
+                        // Show buffer in chat, individual text in mic status
+                        renderStreamingBubble(transcriptBuffer.join(' '));
+                        updateMicStatus(text ? `📝 ${text}` : 'Listening...');
+                    } else if (isFinal) {
+                        // First final response - add to buffer
+                        isBufferingMode = true;
+                        transcriptBuffer.push(text);
+                        // Show buffer in chat, individual text in mic status
+                        renderStreamingBubble(transcriptBuffer.join(' '));
+                        updateMicStatus(text ? `📝 ${text}` : 'Listening...');
+                    } else {
+                        // Partial transcript - show in mic status only
+                        updateMicStatus(text ? `📝 ${text}` : 'Listening...');
+                        renderStreamingBubble(text);
+                    }
+                    
+                    // Update last server response
+                    lastServerResponse = { text, final: isFinal };
+                } else if (response.type === 'recording_complete') {
+                    console.log(`✅ Recording saved: ${response.filename}`);
+                    console.log(`📊 Stats - Chunks: ${response.chunks_received}, Bytes: ${response.total_bytes}`);
+                    addSystemMessage(`✅ Audio recording complete! Saved ${response.chunks_received} chunks (${response.total_bytes} bytes) to server.`);
+                } else {
+                    console.log('📨 WS message:', response);
+                }
+            } catch (e) {
+                // Non-JSON or unexpected format
+                console.log('📝 WebSocket message:', event.data);
+            }
+        };
+        
+        audioWebSocket.onerror = function(error) {
+            console.error('❌ Audio WebSocket error:', error);
+            isStreamingAudio = false;
+        };
+        
+        audioWebSocket.onclose = function(event) {
+            console.log('🔌 Audio WebSocket closed');
+            isStreamingAudio = false;
+        };
+        
+    } catch (error) {
+        console.error('❌ Error setting up audio WebSocket:', error);
+        isStreamingAudio = false;
+    }
+}
+
+function closeAudioWebSocket() {
+    if (audioWebSocket) {
+        audioWebSocket.close();
+        audioWebSocket = null;
+        isStreamingAudio = false;
+    }
+}
+
+function sendAudioChunk(audioChunk) {
+    if (audioWebSocket && audioWebSocket.readyState === WebSocket.OPEN && audioChunk.size > 0) {
+        try {
+            audioWebSocket.send(audioChunk);
+            console.log(`📤 Sent audio chunk: ${audioChunk.size} bytes`);
+        } catch (error) {
+            console.error('❌ Error sending audio chunk:', error);
+        }
+    }
+}
+
 // New Voice Chat Functions
 function handleMicClick() {
     if (isProcessing) {
@@ -132,6 +251,22 @@ function handleMicClick() {
 
 async function startRecording() {
     try {
+        // Reset buffer system for new recording
+        lastServerResponse = null;
+        transcriptBuffer = [];
+        isBufferingMode = false;
+        
+        // Setup WebSocket connection first
+        setupAudioWebSocket();
+        
+        // Wait a moment for WebSocket to connect
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        if (!isStreamingAudio) {
+            addSystemMessage('❌ Could not establish WebSocket connection for audio streaming.');
+            return;
+        }
+        
         // Request microphone access
         const stream = await navigator.mediaDevices.getUserMedia({ 
             audio: {
@@ -141,44 +276,58 @@ async function startRecording() {
             } 
         });
         
-        // Initialize MediaRecorder
+        // Initialize MediaRecorder for streaming
         recordedChunks = [];
         mediaRecorder = new MediaRecorder(stream, {
             mimeType: 'audio/webm;codecs=opus'
         });
         
-        // Set up event handlers
+        // Set up event handlers for streaming
         mediaRecorder.ondataavailable = function(event) {
             if (event.data.size > 0) {
-                recordedChunks.push(event.data);
+                // Send chunk immediately via WebSocket instead of accumulating
+                sendAudioChunk(event.data);
+                recordedChunks.push(event.data); // Keep for backup/debugging
             }
         };
         
         mediaRecorder.onstop = function() {
-            // Create audio blob
-            const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+            console.log('🛑 Recording stopped');
             
-            // Start processing
-            processVoiceMessage(blob);
+            // Send end-of-recording signal
+            if (audioWebSocket && audioWebSocket.readyState === WebSocket.OPEN) {
+                audioWebSocket.send(JSON.stringify({type: 'end_recording'}));
+            }
+            
+            // Close WebSocket after a brief delay
+            setTimeout(() => {
+                closeAudioWebSocket();
+            }, 1000);
             
             // Stop all tracks to free up microphone
             stream.getTracks().forEach(track => track.stop());
+            
+            // Update UI
+            updateMicButton('ready');
+            updateMicStatus('✅ Audio streamed to server successfully');
         };
         
-        // Start recording
-        mediaRecorder.start();
+        // Start recording with timeslice for streaming
+        // Send chunks every 250ms for real-time streaming
+        mediaRecorder.start(250);
         isRecording = true;
         recordingStartTime = Date.now();
         
         // Update UI
         updateMicButton('recording');
-        updateMicStatus('Recording...');
+        updateMicStatus('Recording and streaming...');
         startRecordingTimer();
         
     } catch (error) {
         console.error('Error accessing microphone:', error);
         updateMicStatus('Microphone access denied');
         addSystemMessage('❌ Could not access microphone. Please check permissions.');
+        closeAudioWebSocket();
     }
 }
 
@@ -189,8 +338,28 @@ function stopRecording() {
         
         // Update UI
         updateMicButton('processing');
-        updateMicStatus('Processing...');
+        updateMicStatus('Finalizing audio stream...');
         stopRecordingTimer();
+        
+        // Print final buffer as user message if we have buffered transcripts
+        if (isBufferingMode && transcriptBuffer.length > 0) {
+            const finalBufferText = transcriptBuffer.join(' ');
+            addUserMessage(finalBufferText);
+            console.log('📝 Final buffer printed as user message:', finalBufferText);
+        }
+        
+        // Clear ephemeral bubble and buffers
+        if (streamingBubbleEl && streamingBubbleEl.parentNode) {
+            streamingBubbleEl.parentNode.removeChild(streamingBubbleEl);
+        }
+        streamingBubbleEl = null;
+        currentStreamingTranscript = '';
+        currentStreamingFinal = false;
+        
+        // Reset buffer system
+        lastServerResponse = null;
+        transcriptBuffer = [];
+        isBufferingMode = false;
     }
 }
 
@@ -246,6 +415,69 @@ function addUserMessage(text) {
     
     chatMessages.appendChild(messageDiv);
     scrollToBottom();
+}
+
+// Render or update the ephemeral streaming bubble during recording
+function renderStreamingBubble(text) {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+    if (!isRecording) return; // Only show during active recording
+
+    if (!streamingBubbleEl) {
+        const el = document.createElement('div');
+        el.className = 'message user';
+        el.innerHTML = `
+            <div class="user-avatar">👤</div>
+            <div class="message-content">
+                <div class="message-text" id="ephemeralUserText"></div>
+                <div class="message-timestamp">${getCurrentTime()}</div>
+            </div>
+        `;
+        chatMessages.appendChild(el);
+        streamingBubbleEl = el;
+    }
+    const textEl = streamingBubbleEl.querySelector('#ephemeralUserText');
+    if (textEl) {
+        textEl.textContent = text || '';
+    }
+    scrollToBottom();
+}
+
+// Create or update a streaming user message with partial/final transcripts
+function addOrUpdateStreamingUserMessage(text, isFinal = false) {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+
+    // Create the message bubble if it doesn't exist yet
+    if (!currentUserStreamMessageEl) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message user';
+        messageDiv.innerHTML = `
+            <div class="user-avatar">👤</div>
+            <div class="message-content">
+                <div class="message-text" id="streamingUserText"></div>
+                <div class="message-timestamp" id="streamingUserTimestamp">${getCurrentTime()}</div>
+            </div>
+        `;
+        chatMessages.appendChild(messageDiv);
+        currentUserStreamMessageEl = messageDiv;
+        scrollToBottom();
+    }
+
+    // Update the text content
+    const textEl = currentUserStreamMessageEl.querySelector('#streamingUserText');
+    if (textEl) {
+        textEl.textContent = text || '';
+    }
+
+    // Update mic status with partial text for immediate feedback
+    updateMicStatus(text ? `📝 ${text}` : 'Listening...');
+
+    // Finalize the bubble on end-of-turn
+    if (isFinal) {
+        currentUserStreamMessageEl = null;
+        updateMicStatus('Final transcript received');
+    }
 }
 
 function addAiMessage(text, audioUrl = null) {
