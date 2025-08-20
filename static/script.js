@@ -151,43 +151,37 @@ function setupAudioWebSocket() {
         audioWebSocket.onmessage = function(event) {
             try {
                 const response = JSON.parse(event.data);
+
                 if (response.type === 'transcript') {
-                    const text = response.text || '';
+                    const text = (response.text || '').trim();
                     const isFinal = !!response.final;
-                    currentStreamingTranscript = text;
-                    currentStreamingFinal = isFinal;
-                    
-                    // Handle consecutive final transcript buffering
-                    if (isFinal && lastServerResponse && lastServerResponse.final) {
-                        // Two consecutive final responses - replace the last one with current
-                        if (!isBufferingMode) {
-                            isBufferingMode = true;
-                            transcriptBuffer = [];
-                        }
-                        // Replace the last item with the current (more complete) transcript
-                        if (transcriptBuffer.length > 0) {
-                            transcriptBuffer[transcriptBuffer.length - 1] = text;
+
+                    // 1. Always update the mic status for immediate feedback on the current utterance.
+                    updateMicStatus(text ? `📝 ${text}` : 'Listening...');
+
+                    // 2. We only update the transcript buffer and bubble for final transcripts with content.
+                    if (isFinal && text) {
+                        // Handle AssemblyAI's behavior of sending a more accurate final transcript
+                        // right after a previous one. This replaces the last entry.
+                        if (lastServerResponse && lastServerResponse.final) {
+                            if (transcriptBuffer.length > 0) {
+                                transcriptBuffer[transcriptBuffer.length - 1] = text;
+                            } else {
+                                transcriptBuffer.push(text);
+                            }
                         } else {
+                            // This is a new, distinct final utterance. Add it to the buffer.
                             transcriptBuffer.push(text);
                         }
-                        // Show buffer in chat, individual text in mic status
+
+                        // 3. Update the ephemeral message bubble with the fully accumulated text.
+                        // This only happens when a final transcript is received.
                         renderStreamingBubble(transcriptBuffer.join(' '));
-                        updateMicStatus(text ? `📝 ${text}` : 'Listening...');
-                    } else if (isFinal) {
-                        // First final response - add to buffer
-                        isBufferingMode = true;
-                        transcriptBuffer.push(text);
-                        // Show buffer in chat, individual text in mic status
-                        renderStreamingBubble(transcriptBuffer.join(' '));
-                        updateMicStatus(text ? `📝 ${text}` : 'Listening...');
-                    } else {
-                        // Partial transcript - show in mic status only
-                        updateMicStatus(text ? `📝 ${text}` : 'Listening...');
-                        renderStreamingBubble(text);
                     }
                     
-                    // Update last server response
+                    // 4. Update the state for the next message.
                     lastServerResponse = { text, final: isFinal };
+
                 } else if (response.type === 'recording_complete') {
                     console.log(`✅ Recording saved: ${response.filename}`);
                     console.log(`📊 Stats - Chunks: ${response.chunks_received}, Bytes: ${response.total_bytes}`);
@@ -196,8 +190,8 @@ function setupAudioWebSocket() {
                     console.log('📨 WS message:', response);
                 }
             } catch (e) {
-                // Non-JSON or unexpected format
-                console.log('📝 WebSocket message:', event.data);
+                console.error('Error parsing WebSocket message:', e);
+                console.log('📝 Raw WebSocket message:', event.data);
             }
         };
         
@@ -342,7 +336,7 @@ function stopRecording() {
         stopRecordingTimer();
         
         // Print final buffer as user message if we have buffered transcripts
-        if (isBufferingMode && transcriptBuffer.length > 0) {
+        if (transcriptBuffer.length > 0) {
             const finalBufferText = transcriptBuffer.join(' ');
             addUserMessage(finalBufferText);
             console.log('📝 Final buffer printed as user message:', finalBufferText);
@@ -359,7 +353,7 @@ function stopRecording() {
         // Reset buffer system
         lastServerResponse = null;
         transcriptBuffer = [];
-        isBufferingMode = false;
+        // isBufferingMode is removed
     }
 }
 
