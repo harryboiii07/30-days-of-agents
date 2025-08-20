@@ -455,6 +455,7 @@ async def audio_stream_websocket(websocket: WebSocket, session_id: str):
     - Saves received audio to a file in the uploads directory
     - Handles both binary data and JSON control messages
     - Automatic file cleanup and connection management
+    - Accumulates final transcripts and triggers LLM streaming on recording stop
     """
     await websocket.accept()
     print(f"🎤 Audio WebSocket connected for session: {session_id}")
@@ -466,6 +467,10 @@ async def audio_stream_websocket(websocket: WebSocket, session_id: str):
     audio_file = None
     total_chunks = 0
     total_bytes = 0
+    
+    # Track accumulated final transcripts for LLM processing
+    accumulated_transcripts = []
+    last_final_transcript = None
 
     # Prepare AssemblyAI streaming client
     loop = asyncio.get_event_loop()
@@ -474,10 +479,48 @@ async def audio_stream_websocket(websocket: WebSocket, session_id: str):
         print(f"🟢 AAI session started: {event.id}")
 
     def on_turn(self: type[StreamingClient], event: TurnEvent):
+        nonlocal last_final_transcript, accumulated_transcripts
+        
         transcript_text = (event.transcript or "").strip()
         # Only mark final if we actually have recognized speech
         is_final = bool(event.end_of_turn and transcript_text)
         print(f"📝 Transcript ({'final' if is_final else 'partial'}): {transcript_text}")
+        
+        # Accumulate final transcripts for LLM processing
+        if is_final and transcript_text:
+            # Check if this is a refinement of the last transcript (same sentence, better version)
+            if last_final_transcript:
+                # Compare current transcript with the last one to see if it's a refinement
+                last_text = last_final_transcript.strip()
+                current_text = transcript_text.strip()
+                
+                # Consider it a refinement if they're very similar (same sentence, better version)
+                # Examples: "hello" -> "Hello.", "my name is harshit" -> "My name is harshit."
+                is_refinement = (
+                    current_text.lower().startswith(last_text.lower()) and 
+                    len(current_text) <= len(last_text) + 3  # Allow for minor additions like punctuation
+                )
+                
+                if is_refinement:
+                    # Replace the last transcript with the refined version
+                    if accumulated_transcripts:
+                        accumulated_transcripts[-1] = transcript_text
+                        print(f"🔄 Replaced last transcript with refinement: {transcript_text}")
+                    else:
+                        accumulated_transcripts.append(transcript_text)
+                        print(f"➕ Added first final transcript: {transcript_text}")
+                else:
+                    # This is a new, distinct sentence - add it
+                    accumulated_transcripts.append(transcript_text)
+                    print(f"➕ Added new sentence: {transcript_text}")
+            else:
+                # This is the first final transcript
+                accumulated_transcripts.append(transcript_text)
+                print(f"➕ Added first final transcript: {transcript_text}")
+            
+            last_final_transcript = transcript_text
+            print(f"📚 Current accumulated transcripts: {accumulated_transcripts}")
+        
         try:
             asyncio.run_coroutine_threadsafe(
                 websocket.send_text(json.dumps({
@@ -487,6 +530,7 @@ async def audio_stream_websocket(websocket: WebSocket, session_id: str):
                 })),
                 loop,
             )
+                
         except Exception as send_err:
             print(f"⚠️ Failed to send transcript to client: {send_err}")
 
@@ -706,8 +750,210 @@ async def audio_stream_websocket(websocket: WebSocket, session_id: str):
             except Exception:
                 pass  # Client may have already disconnected
 
+            # Trigger LLM streaming with accumulated transcripts if we have any
+            if accumulated_transcripts:
+                complete_transcript = " ".join(accumulated_transcripts)
+                print(f"🤖 Triggering LLM streaming with complete transcript: {complete_transcript}")
+                print(f"📊 Transcript breakdown: {accumulated_transcripts}")
+                
+                try:
+                    await stream_llm_response(websocket, session_id, complete_transcript, loop)
+                except Exception as llm_error:
+                    print(f"❌ Error triggering LLM streaming: {llm_error}")
+                    try:
+                        await websocket.send_text(json.dumps({
+                            "type": "llm_error",
+                            "message": f"Failed to process AI response: {str(llm_error)}"
+                        }))
+                    except Exception:
+                        pass
+            else:
+                print("⚠️ No final transcripts accumulated, skipping LLM processing")
+                print(f"🔍 Debug: accumulated_transcripts = {accumulated_transcripts}")
+                print(f"🔍 Debug: last_final_transcript = {last_final_transcript}")
+
         try:
             await websocket.close()
+        except Exception:
+            pass
+
+async def stream_llm_response(websocket: WebSocket, session_id: str, user_message: str, loop: asyncio.AbstractEventLoop):
+    """
+    Stream LLM response using Google Gemini's streaming API
+    """
+    try:
+        print(f"🤖 Starting LLM streaming for session: {session_id}")
+        print(f"📝 User message: {user_message}")
+        
+        # Get chat history for context
+        chat_history = get_chat_history(session_id)
+        context = format_chat_history_for_llm(chat_history)
+        llm_input = context + user_message if context else user_message
+        
+        print(f"🤖 Sending to LLM with context: {llm_input[:200]}...")
+        
+        # Get API key
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            print("❌ LLM Error: GEMINI_API_KEY not found in environment")
+            await websocket.send_text(json.dumps({
+                "type": "llm_error",
+                "message": "AI service configuration error"
+            }))
+            return
+        
+        # Initialize Gemini client
+        gemini_client = genai.Client(api_key=api_key)
+        
+        # Start streaming response
+        try:
+            response_stream = gemini_client.models.generate_content_stream(
+                model="gemini-2.0-flash-exp",
+                contents=llm_input
+            )
+        except AttributeError:
+            # Fallback to non-streaming if streaming is not available
+            print("⚠️ Streaming not available, falling back to non-streaming")
+            response = gemini_client.models.generate_content(
+                model="gemini-2.0-flash-exp",
+                contents=llm_input
+            )
+            # Send as single chunk
+            await websocket.send_text(json.dumps({
+                "type": "llm_start",
+                "message": "AI is thinking..."
+            }))
+            
+            ai_response = response.text if hasattr(response, 'text') else str(response)
+            await websocket.send_text(json.dumps({
+                "type": "llm_chunk",
+                "text": ai_response,
+                "chunk_number": 1,
+                "accumulated": ai_response
+            }))
+            
+            await websocket.send_text(json.dumps({
+                "type": "llm_complete",
+                "final_text": ai_response,
+                "total_chunks": 1
+            }))
+            
+            # Save messages and generate TTS
+            try:
+                save_chat_message(session_id, "user", user_message)
+                save_chat_message(session_id, "assistant", ai_response)
+                print(f"💾 Saved chat messages to session: {session_id}")
+            except Exception as save_error:
+                print(f"⚠️ Error saving chat messages: {save_error}")
+            
+            # Generate TTS
+            try:
+                print("🎵 Generating speech response using Murf TTS...")
+                trimmed_response = trim_text_for_tts(ai_response)
+                
+                tts_request = TTSRequest(
+                    text=trimmed_response,
+                    voice_id="en-US-terrell"
+                )
+                
+                tts_result = await generate_speech(tts_request)
+                
+                if tts_result.get("success"):
+                    audio_file_url = tts_result["audio_file"]
+                    print(f"✅ Murf TTS successful: {audio_file_url}")
+                    
+                    await websocket.send_text(json.dumps({
+                        "type": "llm_audio",
+                        "audio_url": audio_file_url,
+                        "message": "Audio response generated successfully"
+                    }))
+                else:
+                    print(f"⚠️ TTS failed: {tts_result.get('message', 'Unknown error')}")
+                    
+            except Exception as tts_error:
+                print(f"❌ TTS generation error: {tts_error}")
+            
+            return
+        
+        accumulated_response = ""
+        chunk_count = 0
+        
+        print("🔄 Starting LLM response stream...")
+        
+        # Send start message
+        await websocket.send_text(json.dumps({
+            "type": "llm_start",
+            "message": "AI is thinking..."
+        }))
+        
+        # Stream the response chunks
+        for chunk in response_stream:
+            if chunk.text:
+                accumulated_response += chunk.text
+                chunk_count += 1
+                
+                # Send chunk to client
+                await websocket.send_text(json.dumps({
+                    "type": "llm_chunk",
+                    "text": chunk.text,
+                    "chunk_number": chunk_count,
+                    "accumulated": accumulated_response
+                }))
+                
+                print(f"📤 Sent LLM chunk {chunk_count}: {chunk.text[:50]}...")
+        
+        # Send completion message
+        await websocket.send_text(json.dumps({
+            "type": "llm_complete",
+            "final_text": accumulated_response,
+            "total_chunks": chunk_count
+        }))
+        
+        print(f"✅ LLM streaming complete: {chunk_count} chunks, {len(accumulated_response)} characters")
+        
+        # Save messages to chat history
+        try:
+            save_chat_message(session_id, "user", user_message)
+            save_chat_message(session_id, "assistant", accumulated_response)
+            print(f"💾 Saved chat messages to session: {session_id}")
+        except Exception as save_error:
+            print(f"⚠️ Error saving chat messages: {save_error}")
+        
+        # Generate TTS for the response
+        try:
+            print("🎵 Generating speech response using Murf TTS...")
+            trimmed_response = trim_text_for_tts(accumulated_response)
+            
+            tts_request = TTSRequest(
+                text=trimmed_response,
+                voice_id="en-US-terrell"
+            )
+            
+            tts_result = await generate_speech(tts_request)
+            
+            if tts_result.get("success"):
+                audio_file_url = tts_result["audio_file"]
+                print(f"✅ Murf TTS successful: {audio_file_url}")
+                
+                # Send audio URL to client
+                await websocket.send_text(json.dumps({
+                    "type": "llm_audio",
+                    "audio_url": audio_file_url,
+                    "message": "Audio response generated successfully"
+                }))
+            else:
+                print(f"⚠️ TTS failed: {tts_result.get('message', 'Unknown error')}")
+                
+        except Exception as tts_error:
+            print(f"❌ TTS generation error: {tts_error}")
+        
+    except Exception as e:
+        print(f"❌ LLM streaming error: {type(e).__name__}: {str(e)}")
+        try:
+            await websocket.send_text(json.dumps({
+                "type": "llm_error",
+                "message": f"AI service error: {str(e)}"
+            }))
         except Exception:
             pass
 
@@ -1039,4 +1285,10 @@ async def agent_chat(session_id: str, audio_file: UploadFile = File(...)):
         }
 
 if __name__ == "__main__":
+    print("🚀 VoiceForge AI Voice Assistant - Day 19: Streaming LLM Responses")
+    print("=" * 70)
+    print("🎤 Real-time voice conversations with streaming AI responses")
+    print("⚡ Live transcription + streaming LLM + auto TTS generation")
+    print("🌐 WebSocket streaming for instant feedback")
+    print("=" * 70)
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
